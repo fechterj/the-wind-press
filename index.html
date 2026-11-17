@@ -1,0 +1,1172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="An interactive wind engraving. Shape a vortex, watch the field breathe, and capture a print.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Wind Press">
+<meta property="og:description" content="Shape a vortex, watch the field breathe, and capture a print.">
+<title>The Wind Press — living engraving</title>
+<style>
+  :root{
+    --paper:#f1ebdd;
+    --paper-2:#e9e1cf;
+    --ink:#191410;
+    --ink-soft:rgba(25,20,16,.55);
+    --ink-faint:rgba(25,20,16,.14);
+    --accent:#a63a29;
+    --serif:"Iowan Old Style",Palatino,Georgia,serif;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;
+    overflow:hidden;
+  }
+  #app{display:grid;grid-template-columns:1fr 352px;height:100%}
+
+  /* ---------- stage ---------- */
+  #stage{position:relative;display:grid;place-items:center;padding:26px 26px 44px;min-width:0}
+  #frame{position:relative;line-height:0}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #plate{position:relative;inset:auto;width:100%;height:100%;
+    box-shadow:0 1px 0 rgba(25,20,16,.08),0 24px 60px -30px rgba(25,20,16,.35)}
+  #wind{pointer-events:none}
+  #frame[data-interactive]{cursor:crosshair;touch-action:none}
+  #frame:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
+  #frame[data-frozen] #plate{box-shadow:0 0 0 1px var(--ink-faint),0 24px 60px -30px rgba(25,20,16,.35)}
+  .instrument{padding:14px 22px 12px;border-bottom:1px solid var(--ink-faint)}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .modes button{min-height:34px}
+  .modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  #mode-note{min-height:2.8em;margin:8px 0 0;font-size:10px;line-height:1.4;color:var(--ink-soft)}
+  .capture{margin:12px 22px 8px;padding:8px 10px;border-radius:4px}
+  #capture{width:100%;min-height:34px;background:var(--accent);border-color:var(--accent);color:#fff8eb}
+  #capture:hover{background:#843023}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button:disabled{opacity:.48;cursor:default}
+  .scroll[inert]{opacity:.48}
+  #tool-actions{display:flex;flex-direction:column;background:var(--paper)}
+  @media (max-width:620px){
+    #hud{left:14px;gap:9px;font-size:9px}
+    #hud span:last-child{display:none}
+    #busy{right:14px}
+    .instrument{padding-top:10px}
+    #mode-note{min-height:0}
+    #tool-actions{order:1;border-bottom:1px solid var(--ink-faint)}
+    aside .scroll{order:2}
+    aside .foot{order:3}
+    .seedrow input{font-size:16px}
+    .capture{margin-top:8px}
+    #tool-actions .row{padding-bottom:8px}
+  }
+  #hud{
+    position:absolute;left:26px;bottom:14px;
+    font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--ink-soft);display:flex;gap:14px;
+  }
+  #hud b{font-weight:500;color:var(--ink)}
+  #busy{
+    position:absolute;right:26px;bottom:14px;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);opacity:0;transition:opacity .2s
+  }
+  #busy.on{opacity:1}
+
+  /* ---------- panel ---------- */
+  aside{
+    border-left:1px solid var(--ink-faint);
+    background:linear-gradient(180deg,var(--paper-2),var(--paper));
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .head{padding:22px 22px 14px;border-bottom:1px solid var(--ink-faint)}
+  .head h1{
+    font-family:var(--serif);font-size:19px;letter-spacing:.16em;
+    margin:0 0 4px;font-weight:400;text-transform:uppercase;
+  }
+  .head p{margin:0;font-size:10.5px;letter-spacing:.08em;color:var(--ink-soft)}
+  .scroll{overflow-y:auto;flex:1;min-height:0;padding-bottom:8px;
+    -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
+    mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
+  section{padding:16px 22px 4px}
+  section h2{
+    font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
+    font-weight:500;color:var(--ink-soft);margin:0 0 12px;
+    display:flex;align-items:center;gap:8px;
+  }
+  section h2::after{content:"";flex:1;height:1px;background:var(--ink-faint)}
+  .knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 4px}
+
+  .knob{
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    padding:4px 0 8px;user-select:none;touch-action:none;cursor:ns-resize;
+    border-radius:6px;transition:background .15s
+  }
+  .knob:hover{background:rgba(25,20,16,.045)}
+  .knob:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .knob svg{display:block;overflow:visible}
+  .knob .lab{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-top:1px}
+  .knob .val{font-size:10.5px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+  .knob.act .val{color:var(--accent)}
+
+  .seedrow{display:flex;align-items:center;gap:8px;padding:4px 0 12px}
+  .seedrow label{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
+  .seedrow input{
+    flex:0 1 168px;min-width:0;font:inherit;font-size:11px;letter-spacing:.06em;
+    padding:6px 8px;border:1px solid var(--ink-faint);border-radius:4px;
+    background:rgba(255,255,255,.35);color:var(--ink);
+    font-variant-numeric:tabular-nums;
+  }
+  .seedrow input:focus{outline:none;border-color:var(--ink-soft)}
+  .seedrow button{flex:0 0 34px;padding:6px 0;font-size:13px;letter-spacing:0}
+  .seedrow .hint{margin-left:auto;font-size:9px;letter-spacing:.1em;color:var(--ink-soft);opacity:.7}
+  .row{display:flex;gap:8px;padding:0 22px 14px}  button{
+    flex:1;font:inherit;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+    padding:9px 6px;border:1px solid var(--ink-faint);background:transparent;color:var(--ink);
+    border-radius:4px;cursor:pointer;transition:.15s
+  }
+  button:hover{border-color:var(--ink-soft);background:rgba(25,20,16,.05)}
+  button:active{transform:translateY(1px)}
+  button.primary{border-color:var(--ink-soft)}
+  .toggles{display:grid;gap:7px;padding:0 22px 6px}
+  .tg{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.1em;
+      text-transform:uppercase;color:var(--ink-soft);cursor:pointer;user-select:none}
+  .tg input{appearance:none;width:26px;height:14px;border-radius:8px;border:1px solid var(--ink-soft);
+    position:relative;cursor:pointer;transition:.2s;margin:0;background:transparent}
+  .tg input::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;
+    border-radius:50%;background:var(--ink-soft);transition:.2s}
+  .tg input:checked{border-color:var(--accent)}
+  .tg input:checked::after{left:14px;background:var(--accent)}
+  .tg span{flex:1}
+  .foot{padding:14px 22px 18px;border-top:1px solid var(--ink-faint);font-size:9.5px;
+        letter-spacing:.08em;color:var(--ink-soft);line-height:1.5}
+  .foot a{color:var(--ink)}
+  @media (max-width:900px),(max-height:620px){
+    html,body{height:auto;overflow:auto}
+    #app{grid-template-columns:1fr;grid-template-rows:auto auto;height:auto}
+    #stage{height:52vh;min-height:300px}
+    aside{border-left:0;border-top:1px solid var(--ink-faint);height:auto;max-height:none}
+    .scroll{overflow:visible;flex:0 0 auto;-webkit-mask-image:none;mask-image:none}
+    .knobs{grid-template-columns:repeat(4,1fr)}
+    .head{padding-top:16px}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="frame" role="group" aria-label="Wind engraving" aria-describedby="mode-note" aria-keyshortcuts="Space ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape" tabindex="0">
+      <canvas id="plate"></canvas>
+      <canvas id="wind"></canvas>
+    </div>
+    <div id="hud"><span><b id="nlines">0</b> lines</span><span><b id="npts">0</b> points</span><span>ψ&nbsp;=&nbsp;Σ&nbsp;a&#8342;&nbsp;sin(k&#8342;·x&nbsp;+&nbsp;φ&#8342;)</span></div>
+    <div id="busy">plotting</div>
+  </div>
+
+  <aside>
+    <div class="head">
+      <h1>The Wind Press</h1>
+      <p>living engraving · a field in motion</p>
+    </div>
+
+    <div class="instrument">
+      <div class="modes" role="group" aria-label="Field mode">
+        <button data-mode="still" aria-pressed="false">Still</button>
+        <button data-mode="breathe" aria-pressed="false">Breathe</button>
+        <button data-mode="shape" aria-pressed="false">Shape</button>
+      </div>
+      <p id="mode-note" aria-live="polite"></p>
+    </div>
+    <div class="scroll">
+      <section>
+        <h2>Field</h2>
+        <div class="knobs" id="k-field"></div>
+      </section>
+
+      <section>
+        <h2>Engraving</h2>
+        <div class="knobs" id="k-line"></div>
+      </section>
+
+      <section>
+        <h2>Wind</h2>
+        <div class="knobs" id="k-wind"></div>
+      </section>
+
+      <section>
+        <h2>Plate</h2>
+        <div class="toggles">
+          <label class="tg"><input type="checkbox" id="t-furniture" checked><span>border &amp; caption</span></label>
+          <label class="tg"><input type="checkbox" id="t-wind" checked><span>flowing particles</span></label>
+          <label class="tg"><input type="checkbox" id="t-wheel" checked><span>mouse wheel on knobs</span></label>
+        </div>
+      </section>
+    </div>
+
+    <div id="tool-actions">
+      <div class="capture"><button id="capture">Capture plate</button></div>
+      <div class="row">
+        <button id="reroll" class="primary">re-roll seed</button>
+        <button id="save-png" aria-label="Download PNG">png</button>
+        <button id="save-svg" aria-label="Download SVG">svg</button>
+      </div>
+    </div>
+    <div class="foot">
+      drag a dial vertically · <b>shift</b> for fine adjustment
+    </div>
+  </aside>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ───────────────────────────── design space ─────────────────────────────
+const D = 1000;              // design units across the plate
+const CX = D / 2, CY = D / 2 - 24, R = 344;
+const PAPER = '#f1ebdd', INK = '#191410';
+const MAX_SEED = 0xffffffff;
+
+const params = {
+  swirls: 3, swirlLam: 3.4,
+  detail: 3, detailLam: 0.75,
+  grain: 0.09,
+  spacing: 3.0, weight: 1, ink: 1,
+  seed: 20261117,
+  particles: 900, speed: 1,
+  furniture: true, wind: true,
+  wheel: true,
+};
+
+// ───────────────────────────── rng ─────────────────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ───────────────────────────── the field ─────────────────────────────
+// ψ(x,y) = Σ aₖ sin(kₖ·x + φₖ),  v = (∂ψ/∂y, −∂ψ/∂x)
+// aₖ = amp/|kₖ| keeps the gradient magnitude comparable across scales.
+let F = { terms: [], speedScale: 1 };
+
+function makeField(rnd, n, lamMin, lamMax, amp, out) {
+  for (let i = 0; i < n; i++) {
+    const th = rnd() * Math.PI * 2;
+    const lam = lamMin + (lamMax - lamMin) * rnd();
+    const k = (Math.PI * 2) / lam;
+    out.push({
+      kx: Math.cos(th) * k,
+      ky: Math.sin(th) * k,
+      p: rnd() * Math.PI * 2,
+      a: amp / k,
+    });
+  }
+}
+
+function buildField() {
+  const rnd = mulberry32(params.seed);
+  const terms = [];
+  const s = params.swirlLam;
+  makeField(rnd, Math.round(params.swirls), R * s * 0.55, R * s * 1.05, 1.0, terms);
+  const m = params.detailLam;
+  makeField(rnd, Math.round(params.detail), R * m * 0.55, R * m * 1.05, 0.34, terms);
+  makeField(rnd, 3, R * 0.20, R * 0.36, params.grain, terms);
+  F.terms = terms;
+
+  // measure a typical gradient magnitude so stroke weight reads the same
+  let acc = 0, n = 0;
+  for (let i = 0; i < 240; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
+    const [vx, vy] = vel(CX + Math.cos(a) * r, CY + Math.sin(a) * r);
+    acc += Math.hypot(vx, vy); n++;
+  }
+  F.speedScale = acc / n || 1;
+}
+
+function vel(x, y) {
+  let gx = 0, gy = 0;
+  const t = F.terms;
+  for (let i = 0; i < t.length; i++) {
+    const c = Math.cos(t[i].kx * x + t[i].ky * y + t[i].p) * t[i].a;
+    gx += c * t[i].kx;
+    gy += c * t[i].ky;
+  }
+  return [gy, -gx];
+}
+
+function unit(x, y) {
+  const [vx, vy] = vel(x, y);
+  const m = Math.hypot(vx, vy);
+  if (m < 1e-9) return null;
+  return [vx / m, vy / m];
+}
+
+// ───────────────────────────── density-limited placement ─────────────────────────────
+const CELL = 8;
+const grid = new Map();
+const key = (cx, cy) => cx * 8192 + cy;
+
+function tooClose(x, y, d) {
+  const d2 = d * d;
+  const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      const a = grid.get(key(cx + i, cy + j));
+      if (!a) continue;
+      for (let t = 0; t < a.length; t += 2) {
+        const dx = a[t] - x, dy = a[t + 1] - y;
+        if (dx * dx + dy * dy < d2) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function commit(pts) {
+  for (let i = 0; i < pts.length; i += 2) {
+    const k = key(Math.floor(pts[i] / CELL), Math.floor(pts[i + 1] / CELL));
+    let a = grid.get(k);
+    if (!a) grid.set(k, (a = []));
+    a.push(pts[i], pts[i + 1]);
+  }
+}
+
+// ───────────────────────────── canvas ─────────────────────────────
+const plate = document.getElementById('plate');
+const wind = document.getElementById('wind');
+const pctx = plate.getContext('2d');
+const wctx = wind.getContext('2d');
+const frame = document.getElementById('frame');
+const hudLines = document.getElementById('nlines');
+const hudPts = document.getElementById('npts');
+const busy = document.getElementById('busy');
+
+let view = { scale: 1, dpr: 1, size: 0 };
+
+function fit() {
+  const stage = document.getElementById('stage');
+  const pad = Math.min(stage.clientWidth, stage.clientHeight) < 640 ? 34 : 74;
+  const avail = Math.min(stage.clientWidth - pad, stage.clientHeight - pad - 26);
+  const size = Math.max(1, Math.floor(avail));
+  frame.style.width = size + 'px';
+  frame.style.height = size + 'px';
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  for (const c of [plate, wind]) {
+    c.width = Math.round(size * dpr);
+    c.height = Math.round(size * dpr);
+  }
+  view = { scale: size / D, dpr, size };
+  redrawAll();
+}
+
+// ───────────────────────────── geometry store ─────────────────────────────
+/** strokes: {pts:Float32Array, w:number, a:number} in design units */
+let strokes = [];
+let stats = { lines: 0, pts: 0 };
+
+function strokePath(stroke, twists = []) {
+  const path = new Path2D();
+  const points = stroke.pts;
+  const point = [0, 0];
+  for (let i = 0; i < points.length; i += 2) {
+    deform(points[i], points[i + 1], twists, point);
+    if (i === 0) path.moveTo(point[0], point[1]);
+    else path.lineTo(point[0], point[1]);
+  }
+  return path;
+}
+
+function execStroke(ctx, stroke, settings, twists) {
+  ctx.strokeStyle = INK;
+  ctx.globalAlpha = Math.min(1, stroke.a * settings.ink);
+  ctx.lineWidth = stroke.w * settings.weight;
+  ctx.lineCap = 'round';
+  ctx.stroke(twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke)));
+}
+
+function paintPaper(ctx, w, h) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// All renderers use design coordinates and the same snapshot of the visible field.
+function plateState() {
+  return {
+    settings: { ...params },
+    lineCount: stats.lines,
+    harmonicCount: F.terms.length,
+    strokes,
+    twists: renderedTwists,
+  };
+}
+
+function startPainting(ctx, scale) {
+  paintPaper(ctx, ctx.canvas.width, ctx.canvas.height);
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+}
+
+function paintPlate(ctx, scale, state) {
+  startPainting(ctx, scale);
+  for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists);
+  ctx.globalAlpha = 1;
+  if (state.settings.furniture) drawFurniture(ctx, state);
+}
+
+function redrawAll() {
+  paintPlate(pctx, view.dpr * view.scale, captured || plateState());
+}
+
+// ───────────────────────────── furniture ─────────────────────────────
+const markers = [[34, 34], [D - 34, 34], [34, D - 34], [D - 34, D - 34]];
+const rings = [[R + 9, 0.8], [R + 17, 1.4]];
+
+function caption(state) {
+  const { seed } = state.settings;
+  const serif = '"Iowan Old Style", Palatino, Georgia, serif';
+  const mono = 'ui-monospace, Menlo, monospace';
+  return [
+    { text: 'THE WIND PRESS', y: D - 56, size: 15, track: 6.2, opacity: 0.9, family: serif },
+    { text: 'PLATE ' + roman((seed % 47) + 1), y: D - 39, size: 8, track: 3.4, opacity: 0.5, family: mono },
+    { text: seed + ' · ' + state.harmonicCount + ' harmonics · ' + state.lineCount + ' lines',
+      y: D - 24, size: 7, track: 2.2, opacity: 0.55, family: mono },
+  ];
+}
+
+function drawFurniture(ctx, state) {
+  ctx.save();
+  ctx.strokeStyle = INK;
+  ctx.globalAlpha = 0.5;
+  for (const [radius, width] of rings) {
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.arc(CX, CY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  for (const [x, y] of markers) {
+    ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y);
+    ctx.moveTo(x, y - 9); ctx.lineTo(x, y + 9);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = INK;
+  for (const { text, y, size, track, opacity, family } of caption(state)) {
+    ctx.globalAlpha = opacity;
+    ctx.font = `400 ${size}px ${family}`;
+    drawTracked(ctx, text, CX, y, track);
+  }
+  ctx.restore();
+}
+
+function drawTracked(ctx, text, x, y, track) {
+  const chars = [...text];
+  let total = 0;
+  const ws = chars.map(c => { const w = ctx.measureText(c).width; total += w + track; return w; });
+  total -= track;
+  let px = x - total / 2;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  chars.forEach((c, i) => { ctx.fillText(c, px, y); px += ws[i] + track; });
+  ctx.textAlign = prev;
+}
+
+function roman(n) {
+  const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let out = '', x = Math.abs(n) % 3999 + 1;
+  for (const [v, s] of map) while (x >= v) { out += s; x -= v; }
+  return out;
+}
+
+// ───────────────────────────── the plotter ─────────────────────────────
+const STEP = 2.4;
+const MAXSTEPS = 900;
+
+let job = null;
+let raf = 0;
+
+function startPlot() {
+  if (captured) return;
+  plotTimer = 0;
+  buildField();
+  strokes = [];
+  renderedTwists = [];
+  stats = { lines: 0, pts: 0 };
+  grid.clear();
+
+  const rnd = mulberry32(params.seed ^ 0x9e3779b9);
+  const dsep = params.spacing;
+  const lattice = dsep * 2.0;
+  const seeds = [];
+  // three jittered passes over the same lattice: the first draws the long arcs,
+  // later passes only fill whatever holes are left (most attempts abort immediately)
+  for (let pass = 0; pass < 3; pass++) {
+    for (let gy = 0; gy * lattice < 2 * R; gy++) {
+      for (let gx = 0; gx * lattice < 2 * R; gx++) {
+        const jx = (rnd() - 0.5) * lattice * 0.9;
+        const jy = (rnd() - 0.5) * lattice * 0.9;
+        const x = CX - R + (gx + 0.5) * lattice + jx;
+        const y = CY - R + (gy + 0.5) * lattice + jy;
+        if ((x - CX) ** 2 + (y - CY) ** 2 < (R * 0.995) ** 2) seeds.push(x, y);
+      }
+    }
+  }
+  // shuffle seed pairs
+  const n = seeds.length / 2;
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    for (let k = 0; k < 2; k++) {
+      const t = seeds[i * 2 + k]; seeds[i * 2 + k] = seeds[j * 2 + k]; seeds[j * 2 + k] = t;
+    }
+  }
+
+  job = { dsep, seeds, i: 0 };
+  syncInstrument();
+  startPainting(pctx, view.dpr * view.scale);
+  busy.classList.add('on');
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function trace(sx, sy, dsep) {
+  const pts = [sx, sy];
+  let x = sx, y = sy;
+  for (let i = 0; i < MAXSTEPS; i++) {
+    const k1 = unit(x, y); if (!k1) break;
+    const k2 = unit(x + k1[0] * STEP / 2, y + k1[1] * STEP / 2); if (!k2) break;
+    const k3 = unit(x + k2[0] * STEP / 2, y + k2[1] * STEP / 2); if (!k3) break;
+    const k4 = unit(x + k3[0] * STEP, y + k3[1] * STEP); if (!k4) break;
+    const dx = (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6;
+    const dy = (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6;
+    x += dx * STEP; y += dy * STEP;
+    if ((x - CX) ** 2 + (y - CY) ** 2 > R * R) break;
+    if (tooClose(x, y, dsep)) break;
+    pts.push(x, y);
+  }
+  return pts;
+}
+
+// width buckets: faster flow → heavier line
+const BUCKETS = [
+  { w: 0.5, a: 0.95 },
+  { w: 0.72, a: 0.88 },
+  { w: 1.0, a: 0.78 },
+  { w: 1.4, a: 0.62 },
+];
+
+function tick() {
+  if (!job) return;
+  const t0 = performance.now();
+  const { seeds, dsep } = job;
+  const total = seeds.length / 2;
+  const first = job.i;
+
+  while (job.i < total && (job.i % 24 !== 0 || performance.now() - t0 < 9 || job.i === first)) {
+    const sx = seeds[job.i * 2], sy = seeds[job.i * 2 + 1];
+    job.i++;
+    if (tooClose(sx, sy, dsep * 1.1)) continue;
+
+    const pts = trace(sx, sy, dsep);
+    if (pts.length < 90) continue;   // stubs add no coverage, only dash-like noise
+    commit(pts);
+
+    const [vx, vy] = vel(pts[0], pts[1]);
+    const sn = Math.min(1, (Math.hypot(vx, vy) / F.speedScale) * 0.9);
+    const b = BUCKETS[Math.min(3, Math.floor(sn * 4))];
+    const s = { pts: Float32Array.from(pts), w: b.w, a: b.a };
+    strokes.push(s);
+
+    // paint immediately: no full repaint, just the new line
+    execStroke(pctx, s, params, []);
+    pctx.globalAlpha = 1;
+
+    stats.lines++; stats.pts += pts.length / 2;
+    if (performance.now() - t0 > 9) break;
+  }
+
+  hudLines.textContent = stats.lines;
+  hudPts.textContent = stats.pts.toLocaleString();
+
+  if (job.i < total) {
+    raf = requestAnimationFrame(tick);
+  } else {
+    job = null;
+    busy.classList.remove('on');
+    pctx.globalAlpha = 1;
+    redrawAll();
+    syncInstrument();
+    requestMotion();
+  }
+}
+
+// ───────────────────────────── living field ─────────────────────────────
+// A radial twist adds an angle that depends only on distance from its center.
+// It preserves area and is the identity outside its radius. Applying the same
+// map to the engraving and the tracer particles keeps their trajectories aligned.
+function deform(x, y, twists, out) {
+  for (const { x: originX, y: originY, inverseRadiusSquared, strength } of twists) {
+    const dx = x - originX;
+    const dy = y - originY;
+    const falloff = 1 - (dx * dx + dy * dy) * inverseRadiusSquared;
+    if (falloff <= 0) continue;
+    const angle = strength * falloff * falloff;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    x = originX + dx * cos - dy * sin;
+    y = originY + dx * sin + dy * cos;
+  }
+  out[0] = x;
+  out[1] = y;
+}
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const modeButtons = [...document.querySelectorAll('[data-mode]')];
+const note = document.getElementById('mode-note');
+const captureButton = document.getElementById('capture');
+const controls = document.querySelector('.scroll');
+const reroll = document.getElementById('reroll');
+const pngButton = document.getElementById('save-png');
+const svgButton = document.getElementById('save-svg');
+let mode = reducedMotion.matches ? 'still' : 'breathe';
+let captured = null;
+let renderedTwists = [];
+let motionFrame = 0;
+let lastMotionTime = 0;
+let nextEngraving = 0;
+let phase = 0;
+const vortex = { x: CX, y: CY, strength: 0, held: false, direction: 1, pointerId: null };
+let particles = [];
+
+function twist(x, y, radius, strength) {
+  return { x, y, inverseRadiusSquared: 1 / (radius * radius), strength };
+}
+
+function currentTwists() {
+  const twists = [];
+  if (mode === 'breathe') {
+    twists.push(twist(CX - 65, CY - 22, R - 69, Math.sin(phase * 0.71) * 1.03));
+    twists.push(twist(CX + 94, CY + 50, R - 108, -Math.sin(phase * 0.93) * 0.94));
+  }
+  if (Math.abs(vortex.strength) > 0.003) {
+    const radius = Math.min(206, R - Math.hypot(vortex.x - CX, vortex.y - CY));
+    twists.push(twist(vortex.x, vortex.y, radius, vortex.strength));
+  }
+  return twists;
+}
+
+function clearParticles() {
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.clearRect(0, 0, wind.width, wind.height);
+}
+
+function seedParticle(particle) {
+  const angle = Math.random() * Math.PI * 2;
+  const radius = Math.sqrt(Math.random()) * R * 0.995;
+  particle.x = CX + Math.cos(angle) * radius;
+  particle.y = CY + Math.sin(angle) * radius;
+  particle.life = 40 + Math.random() * 160;
+}
+
+function resetParticles() {
+  particles = Array.from({ length: Math.round(params.particles) }, () => {
+    const particle = {};
+    seedParticle(particle);
+    return particle;
+  });
+  clearParticles();
+}
+
+function drawParticles(dt) {
+  if (!params.wind || !particles.length) return;
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.globalCompositeOperation = 'destination-out';
+  wctx.fillStyle = 'rgba(0, 0, 0, .14)';
+  wctx.fillRect(0, 0, wind.width, wind.height);
+
+  const scale = view.scale * view.dpr;
+  const from = [0, 0];
+  const to = [0, 0];
+  wctx.globalCompositeOperation = 'source-over';
+  wctx.setTransform(scale, 0, 0, scale, 0, 0);
+  wctx.strokeStyle = 'rgba(166, 58, 41, .58)';
+  wctx.lineWidth = 1.45;
+  wctx.lineCap = 'round';
+  wctx.beginPath();
+  for (const particle of particles) {
+    const direction = unit(particle.x, particle.y);
+    if (!direction) {
+      seedParticle(particle);
+      continue;
+    }
+    deform(particle.x, particle.y, renderedTwists, from);
+    particle.x += direction[0] * 1.6 * params.speed * dt;
+    particle.y += direction[1] * 1.6 * params.speed * dt;
+    particle.life -= dt;
+    if (particle.life <= 0 || (particle.x - CX) ** 2 + (particle.y - CY) ** 2 > R * R) {
+      seedParticle(particle);
+      continue;
+    }
+    deform(particle.x, particle.y, renderedTwists, to);
+    wctx.moveTo(from[0], from[1]);
+    wctx.lineTo(to[0], to[1]);
+  }
+  wctx.stroke();
+}
+
+function canMove() {
+  return mode !== 'still' && !captured && !job && !document.hidden;
+}
+
+function requestMotion() {
+  if (!motionFrame && canMove()) motionFrame = requestAnimationFrame(animate);
+}
+
+function animate(time) {
+  motionFrame = 0;
+  if (!canMove()) {
+    lastMotionTime = 0;
+    return;
+  }
+
+  const dt = lastMotionTime ? Math.min((time - lastMotionTime) / 1000, 0.05) : 1 / 60;
+  lastMotionTime = time;
+  if (mode === 'breathe') phase += dt;
+  const target = vortex.held ? vortex.direction * 3.1 : 0;
+  vortex.strength += (target - vortex.strength) * (1 - Math.exp(-dt * (vortex.held ? 10 : 1.8)));
+  const twists = currentTwists();
+  if (time >= nextEngraving && (twists.length || renderedTwists.length)) {
+    const before = performance.now();
+    renderedTwists = twists;
+    redrawAll();
+    const cost = performance.now() - before;
+    // Leave time for inputs and particle playback even on a densely plotted plate.
+    nextEngraving = time + Math.max(32, Math.min(150, cost * 2.4));
+  }
+  drawParticles(dt * 60);
+  if (mode === 'breathe' || vortex.held || renderedTwists.length || (params.wind && particles.length)) {
+    requestMotion();
+  } else {
+    lastMotionTime = 0;
+  }
+}
+
+function syncInstrument() {
+  const plotting = Boolean(job || plotTimer);
+  const interactive = mode !== 'still' && !captured;
+  frame.toggleAttribute('data-interactive', interactive);
+  frame.toggleAttribute('data-frozen', Boolean(captured));
+  for (const button of modeButtons) {
+    button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
+    button.disabled = Boolean(captured);
+  }
+  if (captured) note.textContent = 'Plate captured. Download this engraving or resume the field.';
+  else if (mode === 'still') note.textContent = 'The field is at rest.';
+  else if (mode === 'shape') note.textContent = 'Press and drag to make a vortex. With the plate focused, use Space and the arrow keys.';
+  else note.textContent = 'Watch the engraving drift. Press and drag inside the circle to stir the field.';
+  captureButton.textContent = captured ? 'Resume field' : 'Capture plate';
+  captureButton.disabled = plotting;
+  pngButton.disabled = plotting;
+  svgButton.disabled = plotting;
+  reroll.disabled = Boolean(captured);
+  controls.inert = Boolean(captured);
+}
+
+function releaseVortex() {
+  vortex.pointerId = null;
+  vortex.held = false;
+}
+
+function chooseMode(nextMode) {
+  if (captured || mode === nextMode) return;
+  mode = nextMode;
+  releaseVortex();
+  vortex.strength = 0;
+  renderedTwists = [];
+  lastMotionTime = 0;
+  nextEngraving = 0;
+  if (!job) redrawAll();
+  syncInstrument();
+  if (mode === 'still') clearParticles();
+  else requestMotion();
+}
+
+function moveVortex(x, y) {
+  const dx = x - CX;
+  const dy = y - CY;
+  const ratio = Math.min(1, (R - 80) / (Math.hypot(dx, dy) || 1));
+  vortex.x = CX + dx * ratio;
+  vortex.y = CY + dy * ratio;
+  nextEngraving = 0;
+}
+
+function platePoint(event) {
+  const bounds = frame.getBoundingClientRect();
+  return [(event.clientX - bounds.left) * D / bounds.width, (event.clientY - bounds.top) * D / bounds.height];
+}
+
+frame.addEventListener('pointerdown', event => {
+  if (!canMove() || event.button !== 0 || vortex.pointerId !== null) return;
+  const [x, y] = platePoint(event);
+  if (Math.hypot(x - CX, y - CY) > R) return;
+  event.preventDefault();
+  frame.focus({ preventScroll: true });
+  moveVortex(x, y);
+  vortex.pointerId = event.pointerId;
+  vortex.direction = event.shiftKey ? -1 : 1;
+  vortex.held = true;
+  frame.setPointerCapture(event.pointerId);
+  requestMotion();
+});
+frame.addEventListener('pointermove', event => {
+  if (event.pointerId === vortex.pointerId) moveVortex(...platePoint(event));
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  frame.addEventListener(type, event => {
+    if (event.pointerId === vortex.pointerId) releaseVortex();
+  });
+}
+frame.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    if (!event.repeat && !captureButton.disabled) captureButton.click();
+    event.preventDefault();
+    return;
+  }
+  if (!canMove() || vortex.pointerId !== null) return;
+  const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+  if (event.code === 'Space') {
+    if (!event.repeat) vortex.held = !vortex.held;
+    vortex.direction = event.shiftKey ? -1 : 1;
+  } else if (Object.hasOwn(arrows, event.key)) {
+    const [dx, dy] = arrows[event.key];
+    moveVortex(vortex.x + dx * 30, vortex.y + dy * 30);
+  } else if (event.key === 'Escape') releaseVortex();
+  else return;
+  event.preventDefault();
+  requestMotion();
+});
+frame.addEventListener('blur', () => {
+  if (vortex.pointerId === null) releaseVortex();
+});
+
+for (const button of modeButtons) button.addEventListener('click', () => chooseMode(button.dataset.mode));
+reducedMotion.addEventListener('change', event => {
+  if (event.matches) chooseMode('still');
+});
+document.addEventListener('visibilitychange', () => {
+  lastMotionTime = 0;
+  if (document.hidden) releaseVortex();
+  else requestMotion();
+});
+
+captureButton.addEventListener('click', () => {
+  if (job || plotTimer) return;
+  if (captured) {
+    captured = null;
+    lastMotionTime = 0;
+    nextEngraving = 0;
+    requestMotion();
+  } else {
+    captured = plateState();
+    releaseVortex();
+    clearParticles();
+  }
+  syncInstrument();
+});
+
+// ───────────────────────────── knobs ─────────────────────────────
+function arc(cx, cy, r, a0, a1) {
+  const x0 = cx + Math.cos(a0) * r, y0 = cy + Math.sin(a0) * r;
+  const x1 = cx + Math.cos(a1) * r, y1 = cy + Math.sin(a1) * r;
+  const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
+  const sweep = a1 > a0 ? 1 : 0;
+  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${large} ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+const A0 = Math.PI * 0.75, A1 = Math.PI * 2.25;  // 270° sweep
+const registry = new Map();
+
+function makeKnob(spec) {
+  const wrap = document.createElement('div');
+  wrap.className = 'knob';
+  wrap.tabIndex = 0;
+  wrap.setAttribute('role', 'slider');
+  wrap.setAttribute('aria-label', spec.label);
+  wrap.setAttribute('aria-valuemin', spec.min);
+  wrap.setAttribute('aria-valuemax', spec.max);
+
+  const SIZE = 46, R0 = 17;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', SIZE);
+  svg.setAttribute('height', SIZE);
+  svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
+
+  const track = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  track.setAttribute('d', arc(SIZE / 2, SIZE / 2, R0, A0, A1));
+  track.setAttribute('fill', 'none');
+  track.setAttribute('stroke', 'rgba(25,20,16,.16)');
+  track.setAttribute('stroke-width', '2');
+  track.setAttribute('stroke-linecap', 'round');
+
+  const fill = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  fill.setAttribute('fill', 'none');
+  fill.setAttribute('stroke', '#a63a29');
+  fill.setAttribute('stroke-width', '2');
+  fill.setAttribute('stroke-linecap', 'round');
+
+  const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  needle.setAttribute('stroke', '#191410');
+  needle.setAttribute('stroke-width', '1.6');
+  needle.setAttribute('stroke-linecap', 'round');
+
+  const hub = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  hub.setAttribute('cx', SIZE / 2); hub.setAttribute('cy', SIZE / 2);
+  hub.setAttribute('r', '2');
+  hub.setAttribute('fill', '#191410');
+
+  svg.append(track, fill, needle, hub);
+
+  const lab = document.createElement('div');
+  lab.className = 'lab'; lab.textContent = spec.label;
+  const val = document.createElement('div');
+  val.className = 'val';
+  wrap.append(svg, lab, val);
+
+  const fmt = spec.fmt || (v => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)));
+  let value = params[spec.key];
+
+  function render() {
+    const t = (value - spec.min) / (spec.max - spec.min);
+    const ang = A0 + (A1 - A0) * t;
+    fill.setAttribute('d', t < 0.001 ? '' : arc(SIZE / 2, SIZE / 2, R0, A0, ang));
+    const nx = SIZE / 2 + Math.cos(ang) * (R0 - 4.5);
+    const ny = SIZE / 2 + Math.sin(ang) * (R0 - 4.5);
+    needle.setAttribute('x1', SIZE / 2); needle.setAttribute('y1', SIZE / 2);
+    needle.setAttribute('x2', nx.toFixed(2)); needle.setAttribute('y2', ny.toFixed(2));
+    val.textContent = fmt(value);
+    wrap.setAttribute('aria-valuenow', value);
+    wrap.setAttribute('aria-valuetext', fmt(value));
+  }
+
+  function set(v, silent) {
+    v = Math.min(spec.max, Math.max(spec.min, v));
+    if (spec.step) v = Math.round(v / spec.step) * spec.step;
+    if (v === value) return;
+    value = v;
+    params[spec.key] = v;
+    render();
+    if (!silent) schedule(spec.effect);
+  }
+
+  let dragging = false, startY = 0, startV = 0;
+  wrap.addEventListener('pointerdown', e => {
+    dragging = true;
+    startY = e.clientY; startV = value;
+    wrap.classList.add('act');
+    wrap.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  wrap.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const fine = e.shiftKey ? 0.16 : 1;
+    const span = spec.max - spec.min;
+    const dy = startY - e.clientY;
+    set(startV + (dy / 380) * span * fine);
+  });
+  const end = () => { dragging = false; wrap.classList.remove('act'); };
+  wrap.addEventListener('pointerup', end);
+  wrap.addEventListener('pointercancel', end);
+
+  wrap.addEventListener('wheel', e => {
+    if (!params.wheel) return;
+    e.preventDefault();
+    const span = spec.max - spec.min;
+    const inc = spec.step ? spec.step : span * (e.shiftKey ? 0.006 : 0.03);
+    set(value + Math.sign(-e.deltaY) * inc);
+  }, { passive: false });
+
+  wrap.addEventListener('keydown', e => {
+    const span = spec.max - spec.min;
+    const increment = spec.step || span * 0.02;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') set(value + increment);
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') set(value - increment);
+    else if (e.key === 'Home') set(spec.min);
+    else if (e.key === 'End') set(spec.max);
+    else return;
+    e.preventDefault();
+  });
+
+  render();
+  registry.set(spec.key, {
+    refresh() { value = params[spec.key]; render(); },
+    set,
+  });
+  return wrap;
+}
+
+// ───────────────────────────── wiring ─────────────────────────────
+let plotTimer = 0;
+function schedule(effect) {
+  if (effect === 'restyle') { redrawAll(); return; }
+  if (effect === 'wind') {
+    resetParticles();
+    requestMotion();
+    return;
+  }
+  clearTimeout(plotTimer);
+  plotTimer = setTimeout(startPlot, 55);
+  syncInstrument();
+}
+
+const KNOBS = {
+  'k-field': [
+    { key: 'swirls', label: 'swirls', min: 1, max: 6, step: 1, fmt: v => v.toFixed(0) },
+    { key: 'swirlLam', label: 'swirl size', min: 0.6, max: 5.0 },
+    { key: 'detail', label: 'detail', min: 0, max: 6, step: 1, fmt: v => v.toFixed(0) },
+    { key: 'detailLam', label: 'detail size', min: 0.2, max: 1.6 },
+    { key: 'grain', label: 'grain', min: 0, max: 0.4, fmt: v => v.toFixed(3) },
+    { key: 'spacing', label: 'spacing', min: 1.8, max: 14, effect: 'replot' },
+  ],
+  'k-line': [
+    { key: 'weight', label: 'weight', min: 0.3, max: 2.4, effect: 'restyle' },
+    { key: 'ink', label: 'ink', min: 0.3, max: 1, effect: 'restyle' },
+  ],
+  'k-wind': [
+    { key: 'particles', label: 'particles', min: 0, max: 2600, step: 50, fmt: v => v.toFixed(0), effect: 'wind' },
+    { key: 'speed', label: 'speed', min: 0.1, max: 3.5, effect: 'wind' },
+  ],
+};
+
+for (const [id, specs] of Object.entries(KNOBS)) {
+  const host = document.getElementById(id);
+  for (const spec of specs) host.appendChild(makeKnob(spec));
+}
+
+const fieldSection = document.getElementById('k-field').parentElement;
+const seedRow = document.createElement('div');
+seedRow.className = 'seedrow';
+seedRow.innerHTML =
+  `<label for="seedval">Seed</label><input id="seedval" type="number" min="1" max="${MAX_SEED}" step="1">` +
+  '<button id="dice" aria-label="Re-roll seed">⟳</button>';
+fieldSection.appendChild(seedRow);
+const seedInput = seedRow.querySelector('#seedval');
+seedInput.value = params.seed;
+
+function applySeed(value) {
+  const seed = Number.isFinite(value) ? Math.max(1, Math.min(MAX_SEED, Math.round(value))) : params.seed;
+  seedInput.value = seed;
+  if (seed === params.seed) return;
+  params.seed = seed;
+  schedule();
+}
+
+function rerollSeed() {
+  applySeed(1 + Math.floor(Math.random() * MAX_SEED));
+}
+seedInput.addEventListener('change', () => applySeed(seedInput.valueAsNumber));
+seedRow.querySelector('#dice').addEventListener('click', rerollSeed);
+reroll.addEventListener('click', rerollSeed);
+
+document.getElementById('t-furniture').addEventListener('change', event => {
+  params.furniture = event.target.checked;
+  redrawAll();
+});
+const particleToggle = document.getElementById('t-wind');
+particleToggle.addEventListener('change', event => {
+  params.wind = event.target.checked;
+  if (params.wind) {
+    resetParticles();
+    requestMotion();
+  } else clearParticles();
+});
+document.getElementById('t-wheel').addEventListener('change', event => {
+  params.wheel = event.target.checked;
+});
+
+function xml(text) {
+  return text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
+}
+
+function buildSVG(state) {
+  const { settings, twists, strokes } = state;
+  const metadata = xml(JSON.stringify({ version: 1, settings, twists }));
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${D}" height="${D}" viewBox="0 0 ${D} ${D}">`,
+    '<title>The Wind Press</title>',
+    `<metadata>${metadata}</metadata>`,
+    `<rect width="${D}" height="${D}" fill="${PAPER}"/>`,
+    `<g fill="none" stroke="${INK}" stroke-linecap="round">`,
+  ];
+  const point = [0, 0];
+  for (const stroke of strokes) {
+    const commands = [];
+    for (let i = 0; i < stroke.pts.length; i += 2) {
+      deform(stroke.pts[i], stroke.pts[i + 1], twists, point);
+      commands.push(`${i ? 'L' : 'M'}${point[0].toFixed(3)} ${point[1].toFixed(3)}`);
+    }
+    const width = (stroke.w * settings.weight).toFixed(3);
+    const opacity = Math.min(1, stroke.a * settings.ink).toFixed(3);
+    parts.push(`<path d="${commands.join('')}" stroke-width="${width}" stroke-opacity="${opacity}"/>`);
+  }
+  parts.push('</g>');
+  if (settings.furniture) {
+    parts.push(`<g fill="none" stroke="${INK}">`);
+    for (const [radius, width] of rings) {
+      parts.push(`<circle cx="${CX}" cy="${CY}" r="${radius}" stroke-width="${width}" opacity=".5"/>`);
+    }
+    for (const [x, y] of markers) {
+      parts.push(`<path d="M${x-9} ${y}h18 M${x} ${y-9}v18" stroke-width=".9" opacity=".4"/>`);
+    }
+    parts.push('</g>');
+    parts.push(`<g fill="${INK}" text-anchor="middle">`);
+    for (const { text, y, size, track, opacity, family } of caption(state)) {
+      parts.push(`<text x="${CX}" y="${y}" font-family="${xml(family)}" font-size="${size}" letter-spacing="${track}" opacity="${opacity}">${xml(text)}</text>`);
+    }
+    parts.push('</g>');
+  }
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+function download(blob, state, extension) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = `the-wind-press-${state.settings.seed}.${extension}`;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+pngButton.addEventListener('click', () => {
+  const state = captured || plateState();
+  const out = document.createElement('canvas');
+  out.width = out.height = 2400;
+  paintPlate(out.getContext('2d'), out.width / D, state);
+  out.toBlob(blob => {
+    if (blob) download(blob, state, 'png');
+  }, 'image/png');
+});
+svgButton.addEventListener('click', () => {
+  const state = captured || plateState();
+  download(new Blob([buildSVG(state)], { type: 'image/svg+xml' }), state, 'svg');
+});
+
+addEventListener('resize', fit);
+fit();
+resetParticles();
+startPlot();
+
+})();
+</script>
+</body>
+</html>
