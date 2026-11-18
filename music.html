@@ -1,0 +1,1587 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Play music with a wind field. Tap along to a song or let a local audio file shape its contours.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="The Wind Press">
+<meta property="og:description" content="Shape a vortex, watch the field breathe, and capture a print.">
+<title>The Wind Press — sound studio</title>
+<style>
+:root {
+  color-scheme: light;
+  --paper: #f5f0e5;
+  --panel: #eee8db;
+  --ink: #24221c;
+  --muted: #655f53;
+  --line: #d3cbb9;
+  --accent: #a03a2b;
+  --accent-soft: #f3e0d5;
+  --hero: #faf6ed;
+  --on-accent: #fffdf6;
+  --print-paper: #f1ebdd;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #151d24; --panel: #1b262e; --hero: #202d35;
+  --ink: #f6edda; --muted: #b4c1c5; --line: #425159;
+  --accent: #ffab86; --accent-soft: #433333; --on-accent: #291c17;
+  --print-paper: #101a22;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+button, input { font: inherit; }
+button { color: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible, #frame:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 4px;
+}
+button, input[type="number"] { border-radius: 4px; border: 1px solid var(--line); }
+button { min-height: 39px; background: transparent; padding: 6px 12px; }
+button:not(:disabled):hover { border-color: var(--accent); }
+dialog { width: min(430px, calc(100% - 28px)); padding: 20px; border-radius: 5px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+dialog::backdrop { background: rgb(0 0 0 / .46); }
+.share-actions { display: flex; justify-content: end; gap: 8px; margin-top: 12px; }
+#share-url { width: 100%; margin-top: 12px; padding: 8px; border: 1px solid var(--line);
+  border-radius: 4px; background: var(--paper); color: var(--ink); font-size: 16px; }
+#copy-status { display: block; min-height: 1.5em; margin-top: 6px; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; min-height: 23px; }
+input[type="checkbox"] { accent-color: var(--accent); }
+h1, h2, p { margin: 0; }
+h1, h2 { font-family: var(--serif); font-weight: 400; line-height: 1.12; }
+h1 { font-size: clamp(31px, 3.1vw, 43px); letter-spacing: -.055em; }
+h2 { font-size: 24px; letter-spacing: -.035em; }
+.eyebrow { color: var(--accent); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .16em; }
+.masthead { display: flex; justify-content: space-between; gap: 16px; align-items: end;
+  padding: 12px clamp(15px, 2.2vw, 34px); border-bottom: 1px solid var(--line); }
+.masthead .eyebrow { margin-bottom: 3px; }
+.exports { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: end; }
+.exports button { font-size: 12px; }
+#capture { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#capture:hover:not(:disabled) { filter: brightness(.92); }
+#app { display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, 27%); max-width: 1620px; margin: auto; }
+.studio { position: sticky; align-self: start; top: 0; min-width: 0;
+  display: grid; gap: 6px; padding: 8px 12px 12px; }
+#stage { height: clamp(300px, calc(100svh - 154px), 1040px); min-width: 0;
+  position: relative; overflow: hidden; background: var(--plate-surround, var(--print-paper)); display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 3px; }
+#frame { position: relative; line-height: 0; }
+#frame[data-interactive] { cursor: crosshair; touch-action: none; }
+canvas { display: block; }
+#plate, #wind { width: 100%; height: 100%; }
+#wind { position: absolute; inset: 0; pointer-events: none; }
+#busy { position: absolute; top: 12px; right: 12px; border-radius: 3px; padding: 5px 7px;
+  background: var(--paper); color: var(--accent); font: 10px var(--mono); opacity: 0; }
+#busy.on { opacity: 1; }
+.playback { display: flex; align-items: center; gap: 11px 16px; flex-wrap: wrap; padding: 5px 3px 0; }
+#play { min-width: 86px; background: var(--ink); color: var(--paper); border-color: var(--ink); }
+#mode-note { color: var(--muted); font-size: 12px; flex: 1; min-width: 128px; }
+#hud { font: 10px var(--mono); white-space: nowrap; color: var(--muted); }
+#hud b { color: var(--ink); font-weight: 500; }
+[hidden] { display: none !important; }
+.editor { display: grid; align-content: start; background: var(--panel); border-left: 1px solid var(--line); }
+.editor section { min-width: 0; border-bottom: 1px solid var(--line); padding: 15px clamp(12px, 1.45vw, 25px); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+#reroll { min-height: 35px; font-size: 12px; }
+.presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.preset { padding: 6px 2px 7px; display: grid; place-items: center; gap: 5px; background: var(--paper);
+  font-size: clamp(10px, 1vw, 12px); line-height: 1.2; }
+.preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.preset canvas { width: min(100%, 64px); height: auto; pointer-events: none; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding-block: 3px; }
+.slider label { font-weight: 570; }
+.slider output { font: 11px var(--mono); color: var(--accent); align-self: center; text-align: right; }
+.slider input { grid-column: 1 / -1; min-height: 25px; }
+.advanced { margin-top: 11px; border-top: 1px solid var(--line); padding-top: 8px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details[open] summary { margin-bottom: 9px; }
+.seedrow { display: flex; gap: 9px; align-items: center; margin-top: 8px; font-size: 13px; }
+.seedrow input { width: 145px; background: var(--paper); padding: 5px 8px; color: var(--ink); }
+.checks { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 10px; font-size: 13px; }
+.formula-hero { background: var(--hero); }
+.formula-card { border-top: 2px solid var(--accent); padding-top: 9px; }
+.formula-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.formula-heading h2 { font-size: 24px; }
+#term-count { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.eq { display: block; font-family: var(--serif); font-size: clamp(20px, 1.85vw, 29px); line-height: 1.28; }
+#first-term { display: block; padding: 7px 8px; margin-top: 8px; background: var(--accent-soft); border-radius: 2px;
+  font: 12px/1.45 var(--mono); color: var(--accent); overflow-wrap: anywhere; }
+#mix-summary, .formula-explain { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.formula-card details { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
+.formula-table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: right; font: 10px/1.6 var(--mono); white-space: nowrap; }
+th, td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+.term-selected { color: var(--accent); background: var(--accent-soft); }
+.motion-equation { font: 11px/1.6 var(--mono); color: var(--accent); margin: 6px 0; }
+.editor [inert] { opacity: .6; }
+.ink-desk { border-top: 1px solid var(--line); margin-top: 4px; padding: 8px 3px 0;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.ink-desk h2 { font-size: 21px; }
+.ink-options { display: flex; gap: 4px; }
+.ink-options button { min-height: 40px; font-size: 12px; }
+.ink-options button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.ink-key { flex: 1; min-width: 150px; max-width: 260px; }
+.ink-key .ramp { display: flex; height: 5px; border-radius: 2px; overflow: hidden; }
+.ramp i { flex: 1; }
+.key-labels { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font: 11px var(--mono); }
+#ink-note { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+#theme { margin-inline-start: 5px; }
+@media (min-width: 781px) { #stage { height: clamp(300px, calc(100svh - 150px), 1040px); } }
+@media (max-width: 780px) {
+  .masthead { align-items: start; }
+  .masthead .exports { margin-top: 4px; }
+  .exports button { min-height: 35px; padding-inline: 8px; }
+  #app { grid-template-columns: minmax(0, 1fr); }
+  .studio { position: static; gap: 7px; padding: 8px 6px 13px; }
+  #stage { height: min(calc(100vw - 12px), 68svh); }
+  #hud { display: none; }
+  .editor { border-left: 0; border-top: 1px solid var(--line); }
+  .editor section { padding: 15px; }
+  .preset { min-height: 60px; font-size: 12px; }
+  .preset canvas { max-width: 58px; }
+  .slider input { min-height: 32px; }
+  .seedrow input { font-size: 16px; }
+}
+@media (max-width: 480px) {
+  .masthead { display: block; padding: 11px 13px 8px; }
+  .masthead h1 { font-size: 34px; }
+  .masthead .eyebrow { margin-bottom: 1px; }
+  .masthead .exports { justify-content: start; }
+  #mode-note { font-size: 11px; }
+}
+.sound-panel { background: var(--hero); }
+#demo { background: var(--ink); color: var(--paper); }
+.song-row { display: flex; gap: 6px; margin: 4px 0 8px; }
+#song-link { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); color: var(--ink); padding: 7px; font-size: 16px; }
+.file-row, #levels { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.file-label { position: relative; display: inline-flex; align-items: center; min-height: 40px; text-decoration: underline; color: var(--accent); cursor: pointer; }
+.file-label input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.file-label:focus-within { outline: 2px solid var(--accent); }
+#embed iframe, #audio { display: block; width: 100%; margin: 7px 0; border: 0; border-radius: 6px; }
+#levels { font: 11px var(--mono); margin-top: 8px; }
+#levels meter { width: 4em; accent-color: var(--accent); }
+#song-status { margin-top: 8px; color: var(--muted); font-size: 12px; }
+#song-page { color: var(--accent); }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div>
+    <div class="eyebrow">Sound studio</div>
+    <h1>The Wind Press</h1>
+  </div>
+  <div class="exports" aria-label="Studio actions">
+    <button id="capture">Capture plate</button>
+    <button id="share" type="button" aria-haspopup="dialog">Share</button>
+    <button id="theme" type="button" aria-pressed="false">Dark mode</button>
+  </div>
+</header>
+<dialog id="share-dialog" aria-labelledby="share-heading">
+  <h2 id="share-heading">Share this pattern</h2>
+  <input type="url" id="share-url" aria-label="Pattern link" readonly>
+  <span id="copy-status" role="status"></span>
+  <form method="dialog" class="share-actions">
+    <button type="submit">Done</button>
+    <button id="copy-link" type="button" autofocus>Copy link</button>
+  </form>
+</dialog>
+<main id="app">
+  <div class="studio">
+    <div id="stage">
+      <div id="frame" role="group" aria-label="Interactive wind engraving" aria-describedby="mode-note"
+           aria-keyshortcuts="Space ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape" tabindex="0">
+        <canvas id="plate" aria-hidden="true"></canvas>
+        <canvas id="wind" aria-hidden="true"></canvas>
+      </div>
+      <div id="busy">Plotting…</div>
+    </div>
+    <div class="playback">
+      <button id="play" type="button">Pause</button>
+      <p id="mode-note">Drag inside the circle to make a vortex.</p>
+      <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
+    </div>
+
+  </div>
+  <aside class="editor" aria-label="Pattern editor">
+    <section class="sound-panel">
+      <div class="section-head"><h2>Soundtrack</h2><button type="button" id="demo">Try the loop</button></div>
+      <form id="song-form"><label for="song-link">Spotify track or YouTube video</label>
+        <div class="song-row"><input id="song-link" type="text" inputmode="url" autocomplete="off" placeholder="Paste a song link"><button>Load</button></div>
+      </form>
+      <div class="file-row"><label class="file-label">Open audio file<input id="song-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac"></label>
+        <button type="button" id="clear-song" hidden>Clear</button></div>
+      <div id="embed"></div>
+      <audio id="audio" controls hidden preload="metadata"></audio>
+      <div id="levels" hidden><span>Bass <meter id="low" max="1"></meter></span><span>Treble <meter id="high" max="1"></meter></span></div>
+      <div id="tempo-row" hidden><button type="button" id="tap">Tap the beat</button> <output id="tempo"></output> · <a id="song-page" target="_blank" rel="noopener">Open song ↗</a></div>
+      <p id="song-status" role="status">Try the original loop to hear bass bend the broad contours and high notes stir the smaller swirl.</p>
+    </section>
+    <section class="ink-desk" aria-labelledby="ink-title" data-editable>
+      <h2 id="ink-title">Field ink</h2>
+      <div class="ink-options" role="group" aria-labelledby="ink-title" aria-describedby="ink-note">
+        <button type="button" data-ink="level">Contour</button>
+        <button type="button" data-ink="speed">Speed</button>
+        <button type="button" data-ink="mono">Mono</button>
+      </div>
+      <div class="ink-key" aria-hidden="true"><div class="ramp"></div><div class="key-labels"><span></span><span></span></div></div>
+      <p id="ink-note"></p>
+    </section>
+    <section class="formula-hero">
+      <div class="formula-card">
+        <div class="formula-heading"><h2>Field formula</h2><span id="term-count"></span></div>
+        <div class="eq" id="field-equation">
+          ψ(x,y) = Σ A<sub>k</sub> sin(k<sub>x</sub>x + k<sub>y</sub>y + φ<sub>k</sub>)
+        </div>
+        <code id="first-term"></code>
+        <p id="mix-summary"></p>
+        <details id="wave-details">
+          <summary>Every wave in this pattern</summary>
+          <p class="formula-explain">Wave size scales the broad waves. Adding ripples adds terms to the sum. The engraving follows the resulting field. Values are rounded for display.</p>
+          <div class="formula-table">
+            <table aria-label="Wave coefficients">
+              <thead><tr><th>Wave</th><th>A</th><th>kₓ</th><th>kᵧ</th><th>φ (rad)</th></tr></thead>
+              <tbody id="term-rows"></tbody>
+            </table>
+          </div>
+        </details>
+        <details>
+          <summary>How the field moves</summary>
+          <p class="formula-explain">The loop twists the contours at two points. Audio adds a bass bend to the first and a treble bend to the second. Depth scales both twists. Dragging adds a temporary third.</p>
+          <div class="motion-equation" id="motion-equation"></div>
+          <p class="formula-explain">Keyboard: focus the plate, press Space to hold a vortex, move it with arrow keys, press Esc to release or Enter to capture.</p>
+        </details>
+      </div>
+    </section>
+    <section data-editable>
+      <div class="section-head">
+        <h2>Start with a pattern</h2>
+        <button id="reroll" type="button">New seed</button>
+      </div>
+      <div id="presets" class="presets" role="group" aria-label="Starting patterns"></div>
+    </section>
+    <section data-editable>
+      <div class="section-head"><h2>Mix the field</h2></div>
+      <div id="field-sliders"></div>
+      <details class="advanced">
+        <summary>More field and print controls</summary>
+    <button id="save-png" aria-label="Download PNG">PNG</button>
+    <button id="save-svg" aria-label="Download SVG">SVG</button>
+        <div id="advanced-sliders"></div>
+        <div class="seedrow"><label for="seedval">Seed</label><input id="seedval" type="number" min="1" step="1"></div>
+        <div class="checks">
+          <label><input type="checkbox" id="t-furniture" checked> Crop marks and caption</label>
+          <label><input type="checkbox" id="t-wind" checked> Moving particles</label>
+        </div>
+      </details>
+    </section>
+  </aside>
+</main>
+<script>
+(() => {
+'use strict';
+
+// ───────────────────────────── design space ─────────────────────────────
+const D = 1000;              // design units across the plate
+const CX = D / 2, CY = D / 2 - 24, R = 344;
+let savedTheme;
+try { savedTheme = localStorage.getItem('wind-press-theme'); } catch {}
+const stocks = {
+  light: { paper: '#f1ebdd', ink: '#191410', tracer: '#91352899',
+    level: ['#24386a','#215487','#237788','#427759','#907226','#a25127','#8b3045'],
+    speed: ['#295078','#376d93','#327e82','#777c37','#ab6a19','#ae4725','#93293c'] },
+  dark: { paper: '#101a22', ink: '#f1e7ce', tracer: '#fff2b799',
+    level: ['#8295ec','#69b3f4','#56d7da','#8bd7a1','#edcd75','#ff9d68','#fa7f9c'],
+    speed: ['#7e9ecd','#74bef0','#67d9d0','#bbdc91','#f6c76a','#ff9961','#ff7883'] },
+};
+const inkModes = {
+  level: ['Low ψ', 'High ψ', 'Each line follows one value of ψ. Its ink locates that contour on the scale from low to high.'],
+  speed: ['Slow', 'Fast', 'Each line takes its ink from the wind speed at its starting point, relative to the field’s average.'],
+  mono: ['', '', 'One ink for every contour. Line weight still shows the wind speed at its starting point.'],
+};
+function inkFor(stroke, settings) {
+  const stock = stocks[settings.theme];
+  return settings.mapping === 'mono' ? stock.ink : stock[settings.mapping][stroke[settings.mapping]];
+}
+function inkBand(fraction) { return Math.max(0, Math.min(6, Math.floor(fraction * 7))); }
+const MAX_SEED = 0xffffffff;
+const VIEW_SPAN = 2 * R + 14;
+
+const params = {
+  theme: Object.hasOwn(stocks, savedTheme) ? savedTheme : 'light', mapping: 'mono',
+  swirls: 3, swirlLam: 3.4,
+  detail: 3, detailLam: 0.75,
+  grain: 0.09,
+  spacing: 3.0, weight: 1, ink: 1,
+  seed: 20261117,
+  particles: 900, speed: 1,
+  furniture: true, wind: true,
+  depth: 1, loopSeconds: 12,
+};
+
+document.documentElement.dataset.theme = params.theme;
+
+// ───────────────────────────── rng ─────────────────────────────
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ───────────────────────────── the field ─────────────────────────────
+// ψ(x,y) = Σ aₖ sin(kₖ·x + φₖ),  v = (∂ψ/∂y, −∂ψ/∂x)
+// aₖ = amp/|kₖ| keeps the gradient magnitude comparable across scales.
+let F = { terms: [], speedScale: 1 };
+
+function makeField(rnd, n, lamMin, lamMax, amp, out) {
+  for (let i = 0; i < n; i++) {
+    const th = rnd() * Math.PI * 2;
+    const lam = lamMin + (lamMax - lamMin) * rnd();
+    const k = (Math.PI * 2) / lam;
+    out.push({
+      kx: Math.cos(th) * k,
+      ky: Math.sin(th) * k,
+      p: rnd() * Math.PI * 2,
+      a: amp / k,
+    });
+  }
+}
+
+function createTerms(settings, random = mulberry32(settings.seed)) {
+  const terms = [];
+  const broad = settings.swirlLam;
+  const ripple = settings.detailLam;
+  makeField(random, settings.swirls, R * broad * 0.55, R * broad * 1.05, 1, terms);
+  makeField(random, settings.detail, R * ripple * 0.55, R * ripple * 1.05, .34, terms);
+  makeField(random, 3, R * .20, R * .36, settings.grain, terms);
+  return terms;
+}
+
+function buildField() {
+  const rnd = mulberry32(params.seed);
+  F.terms = createTerms(params, rnd);
+
+  // measure a typical gradient magnitude so stroke weight reads the same
+  let acc = 0, n = 0;
+  F.minLevel = Infinity;
+  F.maxLevel = -Infinity;
+  for (let i = 0; i < 240; i++) {
+    const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
+    const x = CX + Math.cos(a) * r, y = CY + Math.sin(a) * r;
+    const level = fieldLevel(x, y);
+    F.minLevel = Math.min(F.minLevel, level);
+    F.maxLevel = Math.max(F.maxLevel, level);
+    const [vx, vy] = vel(x, y);
+    acc += Math.hypot(vx, vy); n++;
+  }
+  F.speedScale = acc / n || 1;
+}
+
+function fieldLevel(x, y) {
+  return F.terms.reduce((sum, t) => sum + t.a * Math.sin(t.kx * x + t.ky * y + t.p), 0);
+}
+
+function vel(x, y, t = F.terms) {
+  let gx = 0, gy = 0;
+  for (let i = 0; i < t.length; i++) {
+    const c = Math.cos(t[i].kx * x + t[i].ky * y + t[i].p) * t[i].a;
+    gx += c * t[i].kx;
+    gy += c * t[i].ky;
+  }
+  return [gy, -gx];
+}
+
+function unit(x, y) {
+  const [vx, vy] = vel(x, y);
+  const m = Math.hypot(vx, vy);
+  if (m < 1e-9) return null;
+  return [vx / m, vy / m];
+}
+
+// ───────────────────────────── density-limited placement ─────────────────────────────
+const CELL = 8;
+const grid = new Map();
+const key = (cx, cy) => cx * 8192 + cy;
+
+function tooClose(x, y, d) {
+  const d2 = d * d;
+  const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+  for (let i = -1; i <= 1; i++) {
+    for (let j = -1; j <= 1; j++) {
+      const a = grid.get(key(cx + i, cy + j));
+      if (!a) continue;
+      for (let t = 0; t < a.length; t += 2) {
+        const dx = a[t] - x, dy = a[t + 1] - y;
+        if (dx * dx + dy * dy < d2) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function commit(pts) {
+  for (let i = 0; i < pts.length; i += 2) {
+    const k = key(Math.floor(pts[i] / CELL), Math.floor(pts[i + 1] / CELL));
+    let a = grid.get(k);
+    if (!a) grid.set(k, (a = []));
+    a.push(pts[i], pts[i + 1]);
+  }
+}
+
+// ───────────────────────────── canvas ─────────────────────────────
+const plate = document.getElementById('plate');
+const wind = document.getElementById('wind');
+const pctx = plate.getContext('2d');
+const wctx = wind.getContext('2d');
+const frame = document.getElementById('frame');
+const hudLines = document.getElementById('nlines');
+const hudPts = document.getElementById('npts');
+const busy = document.getElementById('busy');
+
+let view = { scale: 1, dpr: 1, size: 0 };
+
+function fit() {
+  const stage = document.getElementById('stage');
+  const avail = Math.min(stage.clientWidth, stage.clientHeight) - 2;
+  const size = Math.max(1, Math.floor(avail));
+  frame.style.width = size + 'px';
+  frame.style.height = size + 'px';
+  const dpr = Math.min(2.5, window.devicePixelRatio || 1);
+  for (const c of [plate, wind]) {
+    c.width = Math.round(size * dpr);
+    c.height = Math.round(size * dpr);
+  }
+  view = { scale: size / VIEW_SPAN, dpr, size, x: CX - VIEW_SPAN / 2, y: CY - VIEW_SPAN / 2 };
+  redrawAll();
+}
+
+// ───────────────────────────── geometry store ─────────────────────────────
+/** strokes: {pts:Float32Array, w:number, a:number} in design units */
+let strokes = [];
+let stats = { lines: 0, pts: 0 };
+
+function strokePath(stroke, twists = []) {
+  const path = new Path2D();
+  const points = stroke.pts;
+  const point = [0, 0];
+  for (let i = 0; i < points.length; i += 2) {
+    deform(points[i], points[i + 1], twists, point);
+    if (i === 0) path.moveTo(point[0], point[1]);
+    else path.lineTo(point[0], point[1]);
+  }
+  return path;
+}
+
+function execStroke(ctx, stroke, settings, twists) {
+  const path = twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke));
+  ctx.strokeStyle = inkFor(stroke, settings);
+  ctx.globalAlpha = Math.min(1, stroke.a * settings.ink);
+  ctx.lineWidth = stroke.w * settings.weight;
+  ctx.lineCap = 'round';
+  ctx.stroke(path);
+}
+
+function paintPaper(ctx, w, h, settings) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = stocks[settings.theme].paper;
+  ctx.fillRect(0, 0, w, h);
+}
+
+// All renderers use design coordinates and the same snapshot of the visible field.
+function plateState() {
+  return {
+    settings: { ...params },
+    lineCount: stats.lines,
+    harmonicCount: F.terms.length,
+    strokes,
+    twists: renderedTwists,
+    phase,
+  };
+}
+
+function startPainting(ctx, settings, scale, x = 0, y = 0) {
+  paintPaper(ctx, ctx.canvas.width, ctx.canvas.height, settings);
+  ctx.setTransform(scale, 0, 0, scale, -x * scale, -y * scale);
+}
+
+function paintPlate(ctx, scale, state, x = 0, y = 0) {
+  startPainting(ctx, state.settings, scale, x, y);
+  for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists);
+  ctx.globalAlpha = 1;
+  if (state.settings.furniture) drawFurniture(ctx, state);
+}
+
+function redrawAll() {
+  paintPlate(pctx, view.dpr * view.scale, captured || plateState(), view.x, view.y);
+}
+
+// ───────────────────────────── furniture ─────────────────────────────
+const markers = [[34, 34], [D - 34, 34], [34, D - 34], [D - 34, D - 34]];
+
+function caption(state) {
+  const { seed } = state.settings;
+  const serif = '"Iowan Old Style", Palatino, Georgia, serif';
+  const mono = 'ui-monospace, Menlo, monospace';
+  return [
+    { text: 'THE WIND PRESS', y: D - 56, size: 15, track: 6.2, opacity: 0.9, family: serif },
+    { text: 'PLATE ' + roman((seed % 47) + 1), y: D - 39, size: 8, track: 3.4, opacity: 0.5, family: mono },
+    { text: seed + ' · ' + state.harmonicCount + ' harmonics · ' + state.lineCount + ' lines',
+      y: D - 24, size: 7, track: 2.2, opacity: 0.55, family: mono },
+  ];
+}
+
+function drawFurniture(ctx, state) {
+  ctx.save();
+  ctx.strokeStyle = stocks[state.settings.theme].ink;
+  ctx.globalAlpha = 0.4;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  for (const [x, y] of markers) {
+    ctx.moveTo(x - 9, y); ctx.lineTo(x + 9, y);
+    ctx.moveTo(x, y - 9); ctx.lineTo(x, y + 9);
+  }
+  ctx.stroke();
+
+  ctx.fillStyle = stocks[state.settings.theme].ink;
+  for (const { text, y, size, track, opacity, family } of caption(state)) {
+    ctx.globalAlpha = opacity;
+    ctx.font = `400 ${size}px ${family}`;
+    drawTracked(ctx, text, CX, y, track);
+  }
+  ctx.restore();
+}
+
+function drawTracked(ctx, text, x, y, track) {
+  const chars = [...text];
+  let total = 0;
+  const ws = chars.map(c => { const w = ctx.measureText(c).width; total += w + track; return w; });
+  total -= track;
+  let px = x - total / 2;
+  const prev = ctx.textAlign;
+  ctx.textAlign = 'left';
+  chars.forEach((c, i) => { ctx.fillText(c, px, y); px += ws[i] + track; });
+  ctx.textAlign = prev;
+}
+
+function roman(n) {
+  const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+  let out = '', x = Math.abs(n) % 3999 + 1;
+  for (const [v, s] of map) while (x >= v) { out += s; x -= v; }
+  return out;
+}
+
+// ───────────────────────────── the plotter ─────────────────────────────
+const STEP = 2.4;
+const MAXSTEPS = 900;
+
+let job = null;
+let raf = 0;
+
+function startPlot() {
+  if (captured) return;
+  plotTimer = 0;
+  cancelAnimationFrame(raf);
+  buildField();
+  refreshFormula();
+  clearParticles();
+  strokes = [];
+  renderedTwists = [];
+  stats = { lines: 0, pts: 0 };
+  grid.clear();
+
+  const rnd = mulberry32(params.seed ^ 0x9e3779b9);
+  const dsep = params.spacing;
+  const lattice = dsep * 2.0;
+  const seeds = [];
+  // three jittered passes over the same lattice: the first draws the long arcs,
+  // later passes only fill whatever holes are left (most attempts abort immediately)
+  for (let pass = 0; pass < 3; pass++) {
+    for (let gy = 0; gy * lattice < 2 * R; gy++) {
+      for (let gx = 0; gx * lattice < 2 * R; gx++) {
+        const jx = (rnd() - 0.5) * lattice * 0.9;
+        const jy = (rnd() - 0.5) * lattice * 0.9;
+        const x = CX - R + (gx + 0.5) * lattice + jx;
+        const y = CY - R + (gy + 0.5) * lattice + jy;
+        if ((x - CX) ** 2 + (y - CY) ** 2 < (R * 0.995) ** 2) seeds.push(x, y);
+      }
+    }
+  }
+  // shuffle seed pairs
+  const n = seeds.length / 2;
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    for (let k = 0; k < 2; k++) {
+      const t = seeds[i * 2 + k]; seeds[i * 2 + k] = seeds[j * 2 + k]; seeds[j * 2 + k] = t;
+    }
+  }
+
+  job = { dsep, seeds, i: 0 };
+  syncInstrument();
+  startPainting(pctx, params, view.dpr * view.scale, view.x, view.y);
+  busy.classList.add('on');
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function trace(sx, sy, dsep) {
+  const pts = [sx, sy];
+  let x = sx, y = sy;
+  for (let i = 0; i < MAXSTEPS; i++) {
+    const k1 = unit(x, y); if (!k1) break;
+    const k2 = unit(x + k1[0] * STEP / 2, y + k1[1] * STEP / 2); if (!k2) break;
+    const k3 = unit(x + k2[0] * STEP / 2, y + k2[1] * STEP / 2); if (!k3) break;
+    const k4 = unit(x + k3[0] * STEP, y + k3[1] * STEP); if (!k4) break;
+    const dx = (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]) / 6;
+    const dy = (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]) / 6;
+    x += dx * STEP; y += dy * STEP;
+    if ((x - CX) ** 2 + (y - CY) ** 2 > R * R) break;
+    if (tooClose(x, y, dsep)) break;
+    pts.push(x, y);
+  }
+  return pts;
+}
+
+// width buckets: faster flow → heavier line
+const BUCKETS = [
+  { w: 0.5, a: 0.95 },
+  { w: 0.72, a: 0.88 },
+  { w: 1.0, a: 0.78 },
+  { w: 1.4, a: 0.62 },
+];
+
+function tick() {
+  if (!job) return;
+  const t0 = performance.now();
+  const { seeds, dsep } = job;
+  const total = seeds.length / 2;
+  const first = job.i;
+
+  while (job.i < total && (job.i % 24 !== 0 || performance.now() - t0 < 9 || job.i === first)) {
+    const sx = seeds[job.i * 2], sy = seeds[job.i * 2 + 1];
+    job.i++;
+    if (tooClose(sx, sy, dsep * 1.1)) continue;
+
+    const pts = trace(sx, sy, dsep);
+    if (pts.length < 90) continue;   // stubs add no coverage, only dash-like noise
+    commit(pts);
+
+    const [vx, vy] = vel(pts[0], pts[1]);
+    const sn = Math.min(1, (Math.hypot(vx, vy) / F.speedScale) * 0.9);
+    const b = BUCKETS[Math.min(3, Math.floor(sn * 4))];
+    const level = inkBand((fieldLevel(sx, sy) - F.minLevel) / (F.maxLevel - F.minLevel || 1));
+    const speed = inkBand(Math.hypot(vx, vy) / (2 * F.speedScale));
+    const s = { pts: Float32Array.from(pts), w: b.w, a: b.a, level, speed };
+    strokes.push(s);
+
+    // paint immediately: no full repaint, just the new line
+    execStroke(pctx, s, params, []);
+    pctx.globalAlpha = 1;
+
+    stats.lines++; stats.pts += pts.length / 2;
+    if (performance.now() - t0 > 9) break;
+  }
+
+  hudLines.textContent = stats.lines;
+  hudPts.textContent = stats.pts.toLocaleString();
+
+  if (job.i < total) {
+    raf = requestAnimationFrame(tick);
+  } else {
+    job = null;
+    busy.classList.remove('on');
+    pctx.globalAlpha = 1;
+    if (sharedPlate) {
+      phase = sharedPlate.phase;
+      renderedTwists = sharedPlate.twists;
+      captured = plateState();
+      sharedPlate = null;
+      redrawAll();
+    } else {
+      renderPosition();
+    }
+    syncInstrument();
+    requestMotion();
+  }
+}
+
+// ───────────────────────────── living field ─────────────────────────────
+// Apply the same radial deformation to the engraving and its tracers.
+function deform(x, y, twists, out) {
+  for (const { x: originX, y: originY, inverseRadiusSquared, strength } of twists) {
+    const dx = x - originX;
+    const dy = y - originY;
+    const falloff = 1 - (dx * dx + dy * dy) * inverseRadiusSquared;
+    if (falloff <= 0) continue;
+    const angle = strength * falloff * falloff;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    x = originX + dx * cos - dy * sin;
+    y = originY + dx * sin + dy * cos;
+  }
+  out[0] = x;
+  out[1] = y;
+}
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const playButton = document.getElementById('play');
+const note = document.getElementById('mode-note');
+const captureButton = document.getElementById('capture');
+const controls = document.querySelectorAll('[data-editable]');
+const reroll = document.getElementById('reroll');
+const pngButton = document.getElementById('save-png');
+const svgButton = document.getElementById('save-svg');
+const shareButton = document.getElementById('share');
+let playing = !reducedMotion.matches;
+let captured = null;
+let renderedTwists = [];
+let motionFrame = 0;
+let lastMotionTime = 0;
+let nextEngraving = 0;
+let phase = 0;
+const vortex = { x: CX, y: CY, strength: 0, held: false, direction: 1, pointerId: null };
+let particles = [];
+
+function twist(x, y, radius, strength) {
+  return { x, y, inverseRadiusSquared: 1 / (radius * radius), strength };
+}
+
+function currentTwists() {
+  const twists = [];
+  if (params.depth > 0) {
+    const a = 2 * Math.PI * phase;
+    twists.push(twist(CX - 65, CY - 22, R - 69, (Math.sin(a) * 1.03 + bass * 1.18) * params.depth));
+    twists.push(twist(CX + 94, CY + 50, R - 108, (-Math.sin(2 * a) * .94 - treble * 1.25) * params.depth));
+  }
+  if (Math.abs(vortex.strength) > 0.003) {
+    const radius = Math.min(206, R - Math.hypot(vortex.x - CX, vortex.y - CY));
+    twists.push(twist(vortex.x, vortex.y, radius, vortex.strength));
+  }
+  return twists;
+}
+
+function clearParticles() {
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.clearRect(0, 0, wind.width, wind.height);
+}
+
+function seedParticle(particle) {
+  const angle = Math.random() * Math.PI * 2;
+  const radius = Math.sqrt(Math.random()) * R * 0.995;
+  particle.x = CX + Math.cos(angle) * radius;
+  particle.y = CY + Math.sin(angle) * radius;
+  particle.life = 40 + Math.random() * 160;
+}
+
+function resetParticles() {
+  particles = Array.from({ length: Math.round(params.particles) }, () => {
+    const particle = {};
+    seedParticle(particle);
+    return particle;
+  });
+  clearParticles();
+}
+
+function drawParticles(dt) {
+  if (!params.wind || !particles.length) return;
+  wctx.setTransform(1, 0, 0, 1, 0, 0);
+  wctx.globalCompositeOperation = 'destination-out';
+  wctx.fillStyle = 'rgba(0, 0, 0, .14)';
+  wctx.fillRect(0, 0, wind.width, wind.height);
+
+  const scale = view.scale * view.dpr;
+  const from = [0, 0];
+  const to = [0, 0];
+  wctx.globalCompositeOperation = 'source-over';
+  wctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
+  wctx.strokeStyle = stocks[params.theme].tracer;
+  wctx.lineWidth = 1.45;
+  wctx.lineCap = 'round';
+  wctx.beginPath();
+  const travel = 1.6 * params.speed * dt;
+  for (const particle of particles) {
+    const direction = unit(particle.x, particle.y);
+    if (!direction) {
+      seedParticle(particle);
+      continue;
+    }
+    deform(particle.x, particle.y, renderedTwists, from);
+    particle.x += direction[0] * travel;
+    particle.y += direction[1] * travel;
+    particle.life -= dt;
+    if (particle.life <= 0 || (particle.x - CX) ** 2 + (particle.y - CY) ** 2 > R * R) {
+      seedParticle(particle);
+      continue;
+    }
+    deform(particle.x, particle.y, renderedTwists, to);
+    wctx.moveTo(from[0], from[1]);
+    wctx.lineTo(to[0], to[1]);
+  }
+  wctx.stroke();
+}
+
+function canMove() {
+  return !captured && !job && !plotTimer && !document.hidden;
+}
+
+function requestMotion() {
+  if (!motionFrame && canMove()) motionFrame = requestAnimationFrame(animate);
+}
+
+function animate(time) {
+  motionFrame = 0;
+  if (!canMove()) {
+    lastMotionTime = 0;
+    return;
+  }
+
+  const dt = lastMotionTime ? Math.min((time - lastMotionTime) / 1000, 0.05) : 1 / 60;
+  lastMotionTime = time;
+  if (playing) phase = (phase + dt / params.loopSeconds) % 1;
+  const target = vortex.held ? vortex.direction * 3.1 : 0;
+  vortex.strength += (target - vortex.strength) * (1 - Math.exp(-dt * (vortex.held ? 10 : 1.8)));
+  if (playing) sampleSound(time);
+  const twists = currentTwists();
+  if (time >= nextEngraving) {
+    const before = performance.now();
+    const needsRedraw = twists.length || renderedTwists.length;
+    renderedTwists = twists;
+    if (needsRedraw) redrawAll();
+    updateMotionEquation();
+    const cost = performance.now() - before;
+    // Leave time for inputs and particle playback even on a densely plotted plate.
+    nextEngraving = time + Math.max(32, Math.min(150, cost * 2.4));
+  }
+  if (playing || vortex.held || Math.abs(vortex.strength) > .003) {
+    drawParticles(dt * 60);
+    requestMotion();
+  } else {
+    renderPosition();
+    lastMotionTime = 0;
+  }
+}
+
+function syncInstrument() {
+  const plotting = Boolean(job || plotTimer);
+  frame.toggleAttribute('data-interactive', !captured && !plotting);
+  frame.toggleAttribute('data-frozen', Boolean(captured));
+  note.textContent = captured
+    ? 'Plate captured. Share it or download a print.'
+    : 'Drag inside the circle to make a vortex.';
+  playButton.textContent = playing ? 'Pause flow' : 'Play flow';
+  playButton.setAttribute('aria-label', playing ? 'Pause loop' : 'Play loop');
+  playButton.disabled = Boolean(captured);
+  captureButton.textContent = captured ? 'Back to editing' : 'Capture plate';
+  captureButton.disabled = plotting;
+  pngButton.disabled = plotting;
+  svgButton.disabled = plotting;
+  shareButton.disabled = plotting;
+  for (const section of controls) section.inert = Boolean(captured);
+}
+
+function releaseVortex() {
+  vortex.pointerId = null;
+  vortex.held = false;
+}
+
+function moveVortex(x, y) {
+  const dx = x - CX;
+  const dy = y - CY;
+  const ratio = Math.min(1, (R - 80) / (Math.hypot(dx, dy) || 1));
+  vortex.x = CX + dx * ratio;
+  vortex.y = CY + dy * ratio;
+  nextEngraving = 0;
+}
+
+function platePoint(event) {
+  const bounds = frame.getBoundingClientRect();
+  return [
+    view.x + (event.clientX - bounds.left) * VIEW_SPAN / bounds.width,
+    view.y + (event.clientY - bounds.top) * VIEW_SPAN / bounds.height,
+  ];
+}
+
+frame.addEventListener('pointerdown', event => {
+  if (!canMove() || event.button !== 0 || vortex.pointerId !== null) return;
+  const [x, y] = platePoint(event);
+  if (Math.hypot(x - CX, y - CY) > R) return;
+  event.preventDefault();
+  frame.focus({ preventScroll: true });
+  moveVortex(x, y);
+  vortex.pointerId = event.pointerId;
+  vortex.direction = event.shiftKey ? -1 : 1;
+  vortex.held = true;
+  frame.setPointerCapture(event.pointerId);
+  requestMotion();
+});
+frame.addEventListener('pointermove', event => {
+  if (event.pointerId === vortex.pointerId) moveVortex(...platePoint(event));
+});
+for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+  frame.addEventListener(type, event => {
+    if (event.pointerId === vortex.pointerId) releaseVortex();
+  });
+}
+frame.addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    if (!event.repeat && !captureButton.disabled) captureButton.click();
+    event.preventDefault();
+    return;
+  }
+  if (!canMove() || vortex.pointerId !== null) return;
+  const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+  if (event.code === 'Space') {
+    if (!event.repeat) vortex.held = !vortex.held;
+    vortex.direction = event.shiftKey ? -1 : 1;
+  } else if (Object.hasOwn(arrows, event.key)) {
+    const [dx, dy] = arrows[event.key];
+    moveVortex(vortex.x + dx * 30, vortex.y + dy * 30);
+  } else if (event.key === 'Escape') releaseVortex();
+  else return;
+  event.preventDefault();
+  requestMotion();
+});
+frame.addEventListener('blur', () => {
+  if (vortex.pointerId === null) releaseVortex();
+});
+
+reducedMotion.addEventListener('change', event => {
+  if (!event.matches) return;
+  playing = false;
+  lastMotionTime = 0;
+  syncInstrument();
+});
+document.addEventListener('visibilitychange', () => {
+  lastMotionTime = 0;
+  if (document.hidden) releaseVortex();
+  else requestMotion();
+});
+
+captureButton.addEventListener('click', () => {
+  if (job || plotTimer) return;
+  if (captured) {
+    captured = null;
+    applyInks();
+    lastMotionTime = 0;
+    nextEngraving = 0;
+    if (playing) requestMotion();
+    else renderPosition();
+  } else {
+    captured = plateState();
+    releaseVortex();
+    clearParticles();
+  }
+  syncInstrument();
+});
+
+const presets = [
+  { name: 'Estuary', swirls: 3, swirlLam: 3.4, detail: 3, detailLam: .75, grain: .09, seed: 20261117 },
+  { name: 'Silk', swirls: 2, swirlLam: 4.7, detail: 1, detailLam: 1.15, grain: .022, seed: 98412 },
+  { name: 'Eddies', swirls: 5, swirlLam: 1.8, detail: 2, detailLam: .85, grain: .07, seed: 62401 },
+  { name: 'Squall', swirls: 4, swirlLam: 2.5, detail: 6, detailLam: .54, grain: .24, seed: 61902 },
+];
+let selectedPreset = 0;
+let formulaGroup = 'broad';
+const sliderBindings = [];
+
+function signed(value, decimals, suffix = '') {
+  return (value < 0 ? ' − ' : ' + ') + Math.abs(value).toFixed(decimals) + suffix;
+}
+
+function refreshFormula() {
+  const terms = F.terms;
+  const grainStart = params.swirls + params.detail;
+  const index = formulaGroup === 'grain' ? grainStart
+    : formulaGroup === 'ripple' && params.detail ? params.swirls : 0;
+  const wave = terms[index];
+  document.getElementById('term-count').textContent = terms.length + ' waves';
+  document.getElementById('first-term').textContent =
+    'Wave ' + (index + 1) + ' ≈ ' + wave.a.toFixed(2) + ' sin(' +
+    wave.kx.toFixed(5).replace('-', '−') + 'x' +
+    signed(wave.ky, 5, 'y') + signed(wave.p, 3) + ')';
+  document.getElementById('mix-summary').textContent =
+    params.swirls + ' broad + ' + params.detail + ' ripple + 3 grain waves';
+  const rows = terms.map((wave, i) => {
+    const row = document.createElement('tr');
+    const group = i < params.swirls ? 'Broad' : i < params.swirls + params.detail ? 'Ripple' : 'Grain';
+    const groupCell = document.createElement('th');
+    groupCell.scope = 'row';
+    groupCell.textContent = (i + 1) + ' · ' + group;
+    row.append(groupCell);
+    if (i === index) row.className = 'term-selected';
+    for (const [value, precision] of [[wave.a, 2], [wave.kx, 5], [wave.ky, 5], [wave.p, 3]]) {
+      const cell = document.createElement('td');
+      cell.textContent = value.toFixed(precision).replace('-', '−');
+      row.append(cell);
+    }
+    return row;
+  });
+  document.getElementById('term-rows').replaceChildren(...rows);
+}
+
+function updateMotionEquation() {
+  if (!motionDetails.open) return;
+  const depth = params.depth;
+  const seconds = params.loopSeconds;
+  const time = (phase * seconds).toFixed(1);
+  document.getElementById('motion-equation').textContent =
+    't = ' + time + ' s, T = ' + seconds.toFixed(1) + ' s · ' +
+    'twist 1 ≈ ' + (1.03 * depth).toFixed(2) + ' sin(2πt/T) · ' +
+    'twist 2 ≈ −' + (.94 * depth).toFixed(2) + ' sin(4πt/T)';
+}
+const motionDetails = document.querySelector('#motion-equation').closest('details');
+motionDetails.addEventListener('toggle', updateMotionEquation);
+
+function renderPosition() {
+  if (job || captured) return;
+  renderedTwists = currentTwists();
+  redrawAll();
+  clearParticles();
+  updateMotionEquation();
+}
+
+let plotTimer = 0;
+function schedulePlot() {
+  clearTimeout(plotTimer);
+  plotTimer = setTimeout(startPlot, 70);
+  syncInstrument();
+}
+
+function updatePresetButtons() {
+  for (const [i, button] of [...presetGallery.children].entries()) {
+    button.setAttribute('aria-pressed', String(i === selectedPreset));
+  }
+}
+
+function setPattern(preset, index) {
+  const { name, ...settings } = preset;
+  Object.assign(params, settings);
+  releaseVortex();
+  vortex.strength = 0;
+  selectedPreset = index;
+  formulaGroup = 'broad';
+  updatePresetButtons();
+  for (const refresh of sliderBindings) refresh();
+  seedInput.value = params.seed;
+  phase = 0;
+  updateMotionEquation();
+  clearTimeout(plotTimer);
+  startPlot();
+}
+
+// A quick miniature of the same seeded field, traced at low resolution.
+function drawThumbnail(canvas, settings) {
+  const ctx = canvas.getContext('2d');
+  const terms = createTerms(settings);
+  const random = mulberry32(settings.seed ^ 0x2698393e);
+  const radius = 29;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.scale(2, 2);
+  ctx.translate(34, 34);
+  ctx.strokeStyle = stocks[settings.theme].ink;
+  ctx.lineWidth = .42;
+  ctx.beginPath();
+  for (let i = 0; i < 59; i++) {
+    const angle = random() * 2 * Math.PI;
+    const distance = Math.sqrt(random()) * radius;
+    let x = Math.cos(angle) * distance, y = Math.sin(angle) * distance;
+    ctx.moveTo(x, y);
+    for (let step = 0; step < 37; step++) {
+      const [vx, vy] = vel(CX + x * R / radius, CY + y * R / radius, terms);
+      const speed = Math.hypot(vx, vy);
+      if (speed < 1e-6) break;
+      x += vx / speed * 1.1;
+      y += vy / speed * 1.1;
+      if (x * x + y * y > radius * radius) break;
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+}
+
+const presetGallery = document.getElementById('presets');
+for (const [index, preset] of presets.entries()) {
+  const button = document.createElement('button');
+  button.className = 'preset';
+  button.type = 'button';
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 136;
+  canvas.setAttribute('aria-hidden', 'true');
+  button.append(canvas, preset.name);
+  button.addEventListener('click', () => setPattern(preset, index));
+  presetGallery.append(button);
+
+}
+updatePresetButtons();
+
+const themeButton = document.getElementById('theme');
+const inkButtons = document.querySelectorAll('[data-ink]');
+function applyInks() {
+  document.documentElement.dataset.theme = params.theme;
+  themeButton.setAttribute('aria-pressed', String(params.theme === 'dark'));
+  themeButton.textContent = params.theme === 'dark' ? '☾ Dark mode ✓' : '☾ Dark mode';
+  const settings = captured?.settings || params;
+  const stock = stocks[settings.theme];
+  document.getElementById('stage').style.setProperty('--plate-surround', stock.paper);
+  for (const button of inkButtons) button.setAttribute('aria-pressed', String(button.dataset.ink === settings.mapping));
+  const [low, high, description] = inkModes[settings.mapping];
+  document.getElementById('ink-note').textContent = description;
+  document.querySelector('.ink-key').hidden = settings.mapping === 'mono';
+  const labels = document.querySelectorAll('.key-labels span');
+  labels[0].textContent = low;
+  labels[1].textContent = high;
+  document.querySelector('.ramp').replaceChildren(...(stock[settings.mapping] || []).map(color => {
+    const swatch = document.createElement('i');
+    swatch.style.background = color;
+    return swatch;
+  }));
+  for (const [i, canvas] of [...presetGallery.querySelectorAll('canvas')].entries()) {
+    drawThumbnail(canvas, { ...params, ...presets[i] });
+  }
+  clearParticles();
+  redrawAll();
+}
+themeButton.addEventListener('click', () => {
+  params.theme = params.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('wind-press-theme', params.theme); } catch {}
+  applyInks();
+});
+for (const button of inkButtons) button.addEventListener('click', () => {
+  params.mapping = button.dataset.ink;
+  applyInks();
+});
+
+const patternKeys = new Set(['swirls', 'swirlLam', 'detail', 'detailLam', 'grain']);
+const sliders = [
+  ['field-sliders', 'swirlLam', 'Wave size', .6, 5, .1, v => v.toFixed(1) + ' × radius', 'plot'],
+  ['field-sliders', 'detail', 'Ripple waves', 0, 6, 1, v => String(v), 'plot'],
+  ['field-sliders', 'depth', 'Loop depth', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
+  ['advanced-sliders', 'loopSeconds', 'Loop duration', 3, 30, .5, v => v.toFixed(1) + ' s', 'motion'],
+  ['advanced-sliders', 'swirls', 'Broad waves', 1, 6, 1, v => String(v), 'plot'],
+  ['advanced-sliders', 'detailLam', 'Ripple size', .2, 1.6, .05, v => v.toFixed(2) + ' × radius', 'plot'],
+  ['advanced-sliders', 'grain', 'Grain strength', 0, .4, .005, v => Math.round(v * 100) + '%', 'plot'],
+  ['advanced-sliders', 'spacing', 'Ink spacing', 1.8, 14, .1, v => v.toFixed(1), 'plot'],
+  ['advanced-sliders', 'weight', 'Line weight', .3, 2.4, .05, v => v.toFixed(2), 'print'],
+  ['advanced-sliders', 'ink', 'Ink opacity', .3, 1, .05, v => Math.round(v * 100) + '%', 'print'],
+  ['advanced-sliders', 'particles', 'Particle count', 0, 2600, 50, v => String(v), 'particles'],
+  ['advanced-sliders', 'speed', 'Particle speed', .1, 3.5, .1, v => v.toFixed(1) + '×', 'particles'],
+];
+
+function inRange(value, min, max) {
+  return typeof value === 'number' && value >= min && value <= max;
+}
+
+function readSharedPlate() {
+  const prefix = '#plate=';
+  if (!location.hash.startsWith(prefix)) return null;
+  const encoded = location.hash.slice(prefix.length);
+  if (encoded.length > 2400) return null;
+
+  let plate;
+  try {
+    plate = JSON.parse(atob(encoded.replaceAll('-', '+').replaceAll('_', '/')));
+  } catch {
+    return null;
+  }
+  const settings = plate?.settings;
+  if (plate?.version !== 1 || !settings ||
+      !Object.hasOwn(stocks, settings.theme) || !Object.hasOwn(inkModes, settings.mapping) ||
+      !Number.isInteger(settings.seed) || !inRange(settings.seed, 1, MAX_SEED) ||
+      typeof settings.furniture !== 'boolean' || typeof settings.wind !== 'boolean' ||
+      !Number.isInteger(settings.swirls) || !Number.isInteger(settings.detail) ||
+      !sliders.every(([, key, , min, max]) => inRange(settings[key], min, max)) ||
+      !inRange(plate.phase, 0, 1) || !Array.isArray(plate.twists) || plate.twists.length > 3) return null;
+
+  return plate.twists.every(t => t &&
+    inRange(t.x, CX - R, CX + R) && inRange(t.y, CY - R, CY + R) &&
+    inRange(t.inverseRadiusSquared, 1 / (R * R), 1 / (79 * 79)) &&
+    inRange(t.strength, -4, 4)) ? plate : null;
+}
+
+let sharedPlate = readSharedPlate();
+if (sharedPlate) {
+  for (const key of Object.keys(params)) params[key] = sharedPlate.settings[key];
+  selectedPreset = presets.findIndex(({ name, ...settings }) =>
+    Object.keys(settings).every(key => settings[key] === params[key]));
+  updatePresetButtons();
+}
+
+addEventListener('hashchange', event => {
+  if (new URL(event.oldURL).hash.startsWith('#plate=') || location.hash.startsWith('#plate=')) location.reload();
+});
+
+for (const [parent, key, labelText, min, max, step, format, effect] of sliders) {
+  const row = document.createElement('div');
+  row.className = 'slider';
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.id = 'setting-' + key;
+  input.min = min;
+  input.max = max;
+  input.step = step;
+  const label = document.createElement('label');
+  label.htmlFor = input.id;
+  label.textContent = labelText;
+  const output = document.createElement('output');
+  output.htmlFor = input.id;
+  output.setAttribute('aria-hidden', 'true');
+  function refresh() {
+    input.value = params[key];
+    output.textContent = format(params[key]);
+    input.setAttribute('aria-valuetext', output.textContent);
+  }
+  sliderBindings.push(refresh);
+  refresh();
+  input.addEventListener('input', () => {
+    params[key] = input.valueAsNumber;
+    refresh();
+    if (patternKeys.has(key)) {
+      formulaGroup = key === 'grain' ? 'grain'
+        : key === 'detail' || key === 'detailLam' ? 'ripple' : 'broad';
+      selectedPreset = -1;
+      updatePresetButtons();
+    }
+    if (effect === 'plot') schedulePlot();
+    else if (effect === 'motion') renderPosition();
+    else if (effect === 'print') redrawAll();
+    else {
+      resetParticles();
+      requestMotion();
+    }
+  });
+  row.append(label, output, input);
+  document.getElementById(parent).append(row);
+}
+
+const seedInput = document.getElementById('seedval');
+seedInput.max = MAX_SEED;
+seedInput.value = params.seed;
+function applySeed(value) {
+  const seed = Number.isFinite(value) ? Math.max(1, Math.min(MAX_SEED, Math.round(value))) : params.seed;
+  seedInput.value = seed;
+  if (params.seed === seed) return;
+  params.seed = seed;
+  selectedPreset = -1;
+  updatePresetButtons();
+  schedulePlot();
+}
+seedInput.addEventListener('change', () => applySeed(seedInput.valueAsNumber));
+reroll.addEventListener('click', () => applySeed(1 + Math.floor(Math.random() * MAX_SEED)));
+
+const furnitureOption = document.getElementById('t-furniture');
+furnitureOption.checked = params.furniture;
+furnitureOption.addEventListener('change', event => {
+  params.furniture = event.target.checked;
+  redrawAll();
+});
+const windOption = document.getElementById('t-wind');
+windOption.checked = params.wind;
+windOption.addEventListener('change', event => {
+  params.wind = event.target.checked;
+  if (params.wind) {
+    resetParticles();
+    requestMotion();
+  } else clearParticles();
+});
+
+playButton.addEventListener('click', () => {
+  playing = !playing;
+  lastMotionTime = 0;
+  syncInstrument();
+  if (playing) requestMotion();
+});
+
+const shareDialog = document.getElementById('share-dialog');
+const shareInput = document.getElementById('share-url');
+const copyStatus = document.getElementById('copy-status');
+shareButton.addEventListener('click', () => {
+  const { settings, twists, phase } = captured || plateState();
+  const data = btoa(JSON.stringify({ version: 1, settings, twists, phase }))
+    .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
+  const link = new URL(location.href);
+  link.hash = 'plate=' + data;
+  shareInput.value = link.href;
+  copyStatus.textContent = '';
+  shareDialog.showModal();
+});
+
+document.getElementById('copy-link').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(shareInput.value);
+    copyStatus.textContent = 'Link copied.';
+  } catch {
+    shareInput.focus();
+    shareInput.select();
+    copyStatus.textContent = 'Link selected. Copy it to share.';
+  }
+});
+
+function xml(text) {
+  return text.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]);
+}
+
+function buildSVG(state) {
+  const { settings, twists, strokes } = state;
+  const stock = stocks[settings.theme];
+  const metadata = xml(JSON.stringify({ version: 1, settings, twists }));
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${D}" height="${D}" viewBox="0 0 ${D} ${D}">`,
+    '<title>The Wind Press</title>',
+    `<metadata>${metadata}</metadata>`,
+    `<rect width="${D}" height="${D}" fill="${stock.paper}"/>`,
+    `<g fill="none" stroke="${stock.ink}" stroke-linecap="round">`,
+  ];
+  const point = [0, 0];
+  for (const stroke of strokes) {
+    const commands = [];
+    for (let i = 0; i < stroke.pts.length; i += 2) {
+      deform(stroke.pts[i], stroke.pts[i + 1], twists, point);
+      commands.push(`${i ? 'L' : 'M'}${point[0].toFixed(3)} ${point[1].toFixed(3)}`);
+    }
+    const width = (stroke.w * settings.weight).toFixed(3);
+    const opacity = Math.min(1, stroke.a * settings.ink).toFixed(3);
+    parts.push(`<path d="${commands.join('')}" stroke="${inkFor(stroke, settings)}" stroke-width="${width}" stroke-opacity="${opacity}"/>`);
+  }
+  parts.push('</g>');
+  if (settings.furniture) {
+    parts.push(`<g fill="none" stroke="${stock.ink}">`);
+    for (const [x, y] of markers) {
+      parts.push(`<path d="M${x-9} ${y}h18 M${x} ${y-9}v18" stroke-width=".9" opacity=".4"/>`);
+    }
+    parts.push('</g>');
+    parts.push(`<g fill="${stock.ink}" text-anchor="middle">`);
+    for (const { text, y, size, track, opacity, family } of caption(state)) {
+      parts.push(`<text x="${CX}" y="${y}" font-family="${xml(family)}" font-size="${size}" letter-spacing="${track}" opacity="${opacity}">${xml(text)}</text>`);
+    }
+    parts.push('</g>');
+  }
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+function download(blob, state, extension) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = `the-wind-press-${state.settings.seed}.${extension}`;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+pngButton.addEventListener('click', () => {
+  const state = captured || plateState();
+  const out = document.createElement('canvas');
+  out.width = out.height = 2400;
+  paintPlate(out.getContext('2d'), out.width / D, state);
+  out.toBlob(blob => {
+    if (blob) download(blob, state, 'png');
+  }, 'image/png');
+});
+svgButton.addEventListener('click', () => {
+  const state = captured || plateState();
+  download(new Blob([buildSVG(state)], { type: 'image/svg+xml' }), state, 'svg');
+});
+
+const audio = document.getElementById('audio');
+const soundStatus = document.getElementById('song-status');
+const songLink = document.getElementById('song-link');
+const songFile = document.getElementById('song-file');
+const embed = document.getElementById('embed');
+const tempoRow = document.getElementById('tempo-row');
+const tempo = document.getElementById('tempo');
+const lowMeter = document.getElementById('low');
+const highMeter = document.getElementById('high');
+const clearSong = document.getElementById('clear-song');
+let audioContext, analyser, spectrum, fileURL, demoBlob;
+let bass = 0, treble = 0, bpm = 0, taps = [];
+
+function sampleSound(time) {
+  if (analyser && !audio.paused && !audio.hidden) {
+    analyser.getByteFrequencyData(spectrum);
+    const band = (lowHz, highHz) => {
+      const binHz = audioContext.sampleRate / analyser.fftSize;
+      const first = Math.max(1, Math.ceil(lowHz / binHz));
+      const end = Math.min(spectrum.length, Math.ceil(highHz / binHz));
+      let sum = 0;
+      for (let i = first; i < end; i++) sum += spectrum[i] ** 2;
+      return Math.min(1, Math.sqrt(sum / Math.max(1, end - first)) / 165);
+    };
+    bass = band(35, 190);
+    treble = band(1400, 6500);
+    lowMeter.value = bass;
+    highMeter.value = treble;
+  } else if (bpm && taps.length) {
+    const beat = Math.max(0, time - taps[taps.length - 1]) * bpm / 60000;
+    bass = .85 * Math.exp(-5 * (beat % 1));
+    treble = .36 * Math.exp(-6 * ((beat + .5) % 1));
+  } else {
+    bass = treble = 0;
+  }
+}
+
+function clearSound() {
+  audio.pause();
+  audio.removeAttribute('src');
+  audio.load();
+  if (fileURL) URL.revokeObjectURL(fileURL);
+  fileURL = null;
+  embed.replaceChildren();
+  audio.hidden = tempoRow.hidden = clearSong.hidden = document.getElementById('levels').hidden = true;
+  taps = [];
+  bpm = bass = treble = lowMeter.value = highMeter.value = 0;
+  tempo.textContent = '';
+  songFile.value = '';
+}
+clearSong.addEventListener('click', () => {
+  clearSound();
+  songLink.value = '';
+  soundStatus.textContent = 'Choose a new soundtrack.';
+});
+
+function songPlayer(text) {
+  let url;
+  try { url = new URL(text.trim()); } catch { return null; }
+  if (!['http:', 'https:'].includes(url.protocol)) return null;
+  if (url.hostname === 'open.spotify.com') {
+    const match = url.pathname.match(/^\/(?:intl-[a-z-]+\/)?track\/([a-zA-Z0-9]{22})\/?$/);
+    return match && { title: 'Spotify', src: 'https://open.spotify.com/embed/track/' + match[1],
+      link: 'https://open.spotify.com/track/' + match[1], height: 152 };
+  }
+  let id;
+  if (url.hostname === 'youtu.be') id = url.pathname.slice(1);
+  if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com'].includes(url.hostname)) {
+    id = url.pathname === '/watch' ? url.searchParams.get('v') : url.pathname.match(/^\/(?:shorts|live|embed)\/([^/]+)\/?$/)?.[1];
+  }
+  return id && /^[\w-]{11}$/.test(id) ? { title: 'YouTube', src: 'https://www.youtube.com/embed/' + id,
+    link: 'https://www.youtube.com/watch?v=' + id, height: 210 } : null;
+}
+
+document.getElementById('song-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const player = songPlayer(songLink.value);
+  if (!player) {
+    soundStatus.textContent = 'Use a Spotify track link or a YouTube video link.';
+    songLink.focus();
+    return;
+  }
+  clearSound();
+  const iframe = document.createElement('iframe');
+  iframe.title = player.title + ' music player';
+  iframe.height = player.height;
+  iframe.allow = 'autoplay; encrypted-media; fullscreen; picture-in-picture';
+  iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+  iframe.src = player.src;
+  embed.append(iframe);
+  tempoRow.hidden = clearSong.hidden = false;
+  document.getElementById('song-page').href = player.link;
+  soundStatus.textContent = 'Play the song in the player, then tap along to pulse the field at your tempo.';
+});
+document.getElementById('tap').addEventListener('click', () => {
+  const now = performance.now();
+  const gap = now - taps[taps.length - 1];
+  if (gap < 180) return;
+  if (gap > 2000) { taps = []; bpm = 0; }
+  taps.push(now);
+  if (taps.length > 6) taps.shift();
+  if (taps.length > 1) bpm = 60000 * (taps.length - 1) / (now - taps[0]);
+  tempo.textContent = bpm ? Math.round(bpm) + ' BPM' : 'Tap again';
+  if (captured) captureButton.click();
+  playing = true;
+  syncInstrument();
+  requestMotion();
+});
+
+function playFile(blob, title, loop) {
+  clearSound();
+  songLink.value = '';
+  fileURL = URL.createObjectURL(blob);
+  audio.src = fileURL;
+  audio.loop = loop;
+  audio.hidden = clearSong.hidden = false;
+  if (captured) captureButton.click();
+  try {
+    if (!audioContext) {
+      audioContext = new AudioContext();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = .68;
+      spectrum = new Uint8Array(analyser.frequencyBinCount);
+      audioContext.createMediaElementSource(audio).connect(analyser);
+      analyser.connect(audioContext.destination);
+    }
+    audioContext.resume().catch(() => {});
+    document.getElementById('levels').hidden = false;
+    soundStatus.textContent = title + ' · Bass bends the broad contours. Treble stirs the smaller swirl.';
+  } catch {
+    soundStatus.textContent = 'This browser supports playback only.';
+  }
+  const source = fileURL;
+  audio.play().catch(() => {
+    if (fileURL === source) soundStatus.textContent = audio.error ? 'Choose an audio file your browser can play.' : 'Press Play in the audio player.';
+  });
+}
+audio.addEventListener('play', () => {
+  audioContext?.resume().catch(() => {});
+  if (!reducedMotion.matches) playing = true;
+  syncInstrument();
+  requestMotion();
+});
+audio.addEventListener('pause', () => {
+  if (!audio.paused) return;
+  bass = treble = lowMeter.value = highMeter.value = 0;
+});
+audio.addEventListener('error', () => {
+  if (fileURL) soundStatus.textContent = 'Choose an audio file your browser can play.';
+});
+songFile.addEventListener('change', () => {
+  const file = songFile.files[0];
+  if (file) playFile(file, file.name, false);
+});
+
+// Four bars at 100 BPM, rendered into a small mono WAV for the same input path as a local song.
+function makeLoop() {
+  const rate = 22050, beat = .6, frames = Math.round(16 * beat * rate);
+  const wav = new ArrayBuffer(44 + frames * 2);
+  const data = new DataView(wav);
+  const tag = (offset, text) => [...text].forEach((c, i) => data.setUint8(offset + i, c.charCodeAt(0)));
+  tag(0, 'RIFF'); data.setUint32(4, wav.byteLength - 8, true); tag(8, 'WAVE'); tag(12, 'fmt ');
+  data.setUint32(16, 16, true); data.setUint16(20, 1, true); data.setUint16(22, 1, true);
+  data.setUint32(24, rate, true); data.setUint32(28, rate * 2, true);
+  data.setUint16(32, 2, true); data.setUint16(34, 16, true);
+  tag(36, 'data'); data.setUint32(40, frames * 2, true);
+  const roots = [55, 65.406, 73.416, 49];
+  const notes = [1, 1.5, 2, 1.25, 1.5, 2.5, 2, 1.5];
+  for (let i = 0; i < frames; i++) {
+    const t = i / rate, b = Math.floor(t / beat), kick = t % beat, pluck = t % (beat / 2);
+    const root = roots[Math.floor(b / 4)], hz = root * 8 * notes[Math.floor(t / (beat / 2)) % 8];
+    const angle = 2 * Math.PI * hz * pluck;
+    const bassTone = .43 * Math.exp(-7 * kick) * Math.sin(2 * Math.PI * root * kick);
+    const bell = (.19 * Math.sin(angle) + .12 * Math.sin(4 * angle)) * Math.exp(-14 * pluck);
+    const edge = Math.min(1, pluck * 240, (beat / 2 - pluck) * 160);
+    data.setInt16(44 + 2 * i, (bassTone + bell) * edge * 32767, true);
+  }
+  return new Blob([wav], { type: 'audio/wav' });
+}
+document.getElementById('demo').addEventListener('click', () => {
+  demoBlob ??= makeLoop();
+  playFile(demoBlob, 'Tide Study · original loop', true);
+});
+
+addEventListener('resize', fit);
+fit();
+applyInks();
+resetParticles();
+startPlot();
+
+})();
+</script>
+</body>
+</html>
