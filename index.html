@@ -7,219 +7,202 @@
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Wind Press">
 <meta property="og:description" content="Shape a vortex, watch the field breathe, and capture a print.">
-<title>The Wind Press — living engraving</title>
+<title>The Wind Press — pattern studio</title>
 <style>
-  :root{
-    --paper:#f1ebdd;
-    --paper-2:#e9e1cf;
-    --ink:#191410;
-    --ink-soft:rgba(25,20,16,.55);
-    --ink-faint:rgba(25,20,16,.14);
-    --accent:#a63a29;
-    --serif:"Iowan Old Style",Palatino,Georgia,serif;
-    --mono:ui-monospace,"SF Mono",Menlo,monospace;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{
-    background:var(--paper);color:var(--ink);
-    font-family:var(--mono);
-    -webkit-font-smoothing:antialiased;
-    overflow:hidden;
-  }
-  #app{display:grid;grid-template-columns:1fr 352px;height:100%}
-
-  /* ---------- stage ---------- */
-  #stage{position:relative;display:grid;place-items:center;padding:26px 26px 44px;min-width:0}
-  #frame{position:relative;line-height:0}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
-  #plate{position:relative;inset:auto;width:100%;height:100%;
-    box-shadow:0 1px 0 rgba(25,20,16,.08),0 24px 60px -30px rgba(25,20,16,.35)}
-  #wind{pointer-events:none}
-  #frame[data-interactive]{cursor:crosshair;touch-action:none}
-  #frame:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
-  #frame[data-frozen] #plate{box-shadow:0 0 0 1px var(--ink-faint),0 24px 60px -30px rgba(25,20,16,.35)}
-  .instrument{padding:14px 22px 12px;border-bottom:1px solid var(--ink-faint)}
-  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
-  .modes button{min-height:34px}
-  .modes button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-  #mode-note{min-height:2.8em;margin:8px 0 0;font-size:10px;line-height:1.4;color:var(--ink-soft)}
-  .capture{margin:12px 22px 8px;padding:8px 10px;border-radius:4px}
-  #capture{width:100%;min-height:34px;background:var(--accent);border-color:var(--accent);color:#fff8eb}
-  #capture:hover{background:#843023}
-  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  button:disabled{opacity:.48;cursor:default}
-  .scroll[inert]{opacity:.48}
-  #tool-actions{display:flex;flex-direction:column;background:var(--paper)}
-  @media (max-width:620px){
-    #hud{left:14px;gap:9px;font-size:9px}
-    #hud span:last-child{display:none}
-    #busy{right:14px}
-    .instrument{padding-top:10px}
-    #mode-note{min-height:0}
-    #tool-actions{order:1;border-bottom:1px solid var(--ink-faint)}
-    aside .scroll{order:2}
-    aside .foot{order:3}
-    .seedrow input{font-size:16px}
-    .capture{margin-top:8px}
-    #tool-actions .row{padding-bottom:8px}
-  }
-  #hud{
-    position:absolute;left:26px;bottom:14px;
-    font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-    color:var(--ink-soft);display:flex;gap:14px;
-  }
-  #hud b{font-weight:500;color:var(--ink)}
-  #busy{
-    position:absolute;right:26px;bottom:14px;font-size:10px;letter-spacing:.14em;
-    text-transform:uppercase;color:var(--accent);opacity:0;transition:opacity .2s
-  }
-  #busy.on{opacity:1}
-
-  /* ---------- panel ---------- */
-  aside{
-    border-left:1px solid var(--ink-faint);
-    background:linear-gradient(180deg,var(--paper-2),var(--paper));
-    display:flex;flex-direction:column;min-height:0;
-  }
-  .head{padding:22px 22px 14px;border-bottom:1px solid var(--ink-faint)}
-  .head h1{
-    font-family:var(--serif);font-size:19px;letter-spacing:.16em;
-    margin:0 0 4px;font-weight:400;text-transform:uppercase;
-  }
-  .head p{margin:0;font-size:10.5px;letter-spacing:.08em;color:var(--ink-soft)}
-  .scroll{overflow-y:auto;flex:1;min-height:0;padding-bottom:8px;
-    -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
-    mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
-  section{padding:16px 22px 4px}
-  section h2{
-    font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;
-    font-weight:500;color:var(--ink-soft);margin:0 0 12px;
-    display:flex;align-items:center;gap:8px;
-  }
-  section h2::after{content:"";flex:1;height:1px;background:var(--ink-faint)}
-  .knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 4px}
-
-  .knob{
-    display:flex;flex-direction:column;align-items:center;gap:2px;
-    padding:4px 0 8px;user-select:none;touch-action:none;cursor:ns-resize;
-    border-radius:6px;transition:background .15s
-  }
-  .knob:hover{background:rgba(25,20,16,.045)}
-  .knob:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .knob svg{display:block;overflow:visible}
-  .knob .lab{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-top:1px}
-  .knob .val{font-size:10.5px;letter-spacing:.04em;font-variant-numeric:tabular-nums}
-  .knob.act .val{color:var(--accent)}
-
-  .seedrow{display:flex;align-items:center;gap:8px;padding:4px 0 12px}
-  .seedrow label{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft)}
-  .seedrow input{
-    flex:0 1 168px;min-width:0;font:inherit;font-size:11px;letter-spacing:.06em;
-    padding:6px 8px;border:1px solid var(--ink-faint);border-radius:4px;
-    background:rgba(255,255,255,.35);color:var(--ink);
-    font-variant-numeric:tabular-nums;
-  }
-  .seedrow input:focus{outline:none;border-color:var(--ink-soft)}
-  .seedrow button{flex:0 0 34px;padding:6px 0;font-size:13px;letter-spacing:0}
-  .seedrow .hint{margin-left:auto;font-size:9px;letter-spacing:.1em;color:var(--ink-soft);opacity:.7}
-  .row{display:flex;gap:8px;padding:0 22px 14px}  button{
-    flex:1;font:inherit;font-size:10px;letter-spacing:.13em;text-transform:uppercase;
-    padding:9px 6px;border:1px solid var(--ink-faint);background:transparent;color:var(--ink);
-    border-radius:4px;cursor:pointer;transition:.15s
-  }
-  button:hover{border-color:var(--ink-soft);background:rgba(25,20,16,.05)}
-  button:active{transform:translateY(1px)}
-  button.primary{border-color:var(--ink-soft)}
-  .toggles{display:grid;gap:7px;padding:0 22px 6px}
-  .tg{display:flex;align-items:center;gap:9px;font-size:10px;letter-spacing:.1em;
-      text-transform:uppercase;color:var(--ink-soft);cursor:pointer;user-select:none}
-  .tg input{appearance:none;width:26px;height:14px;border-radius:8px;border:1px solid var(--ink-soft);
-    position:relative;cursor:pointer;transition:.2s;margin:0;background:transparent}
-  .tg input::after{content:"";position:absolute;top:2px;left:2px;width:8px;height:8px;
-    border-radius:50%;background:var(--ink-soft);transition:.2s}
-  .tg input:checked{border-color:var(--accent)}
-  .tg input:checked::after{left:14px;background:var(--accent)}
-  .tg span{flex:1}
-  .foot{padding:14px 22px 18px;border-top:1px solid var(--ink-faint);font-size:9.5px;
-        letter-spacing:.08em;color:var(--ink-soft);line-height:1.5}
-  .foot a{color:var(--ink)}
-  @media (max-width:900px),(max-height:620px){
-    html,body{height:auto;overflow:auto}
-    #app{grid-template-columns:1fr;grid-template-rows:auto auto;height:auto}
-    #stage{height:52vh;min-height:300px}
-    aside{border-left:0;border-top:1px solid var(--ink-faint);height:auto;max-height:none}
-    .scroll{overflow:visible;flex:0 0 auto;-webkit-mask-image:none;mask-image:none}
-    .knobs{grid-template-columns:repeat(4,1fr)}
-    .head{padding-top:16px}
-  }
+:root {
+  color-scheme: light;
+  --paper: #f5f0e5;
+  --panel: #eee8db;
+  --ink: #24221c;
+  --muted: #655f53;
+  --line: #d3cbb9;
+  --accent: #a03a2b;
+  --accent-soft: #f3e0d5;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+button, input { font: inherit; }
+button { color: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, summary:focus-visible, #frame:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 4px;
+}
+button, input[type="number"] { border-radius: 4px; border: 1px solid var(--line); }
+button { min-height: 39px; background: transparent; padding: 6px 12px; }
+button:not(:disabled):hover { border-color: var(--accent); }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; min-height: 23px; }
+input[type="checkbox"] { accent-color: var(--accent); }
+h1, h2, p { margin: 0; }
+h1, h2 { font-family: var(--serif); font-weight: 400; line-height: 1.12; }
+h1 { font-size: clamp(31px, 3.1vw, 43px); letter-spacing: -.055em; }
+h2 { font-size: 24px; letter-spacing: -.035em; }
+.eyebrow { color: var(--accent); font: 10px var(--mono); text-transform: uppercase; letter-spacing: .16em; }
+.masthead { display: flex; justify-content: space-between; gap: 16px; align-items: end;
+  padding: 12px clamp(15px, 2.2vw, 34px); border-bottom: 1px solid var(--line); }
+.masthead .eyebrow { margin-bottom: 3px; }
+.exports { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: end; }
+.exports button { font-size: 12px; }
+#capture { background: var(--accent); color: #fffdf6; border-color: var(--accent); }
+#capture:hover:not(:disabled) { background: #7f2d22; }
+#app { display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, 27%); max-width: 1620px; margin: auto; }
+.studio { position: sticky; align-self: start; top: 0; min-width: 0;
+  display: grid; gap: 6px; padding: 8px 12px 12px; }
+#stage { height: clamp(300px, calc(100svh - 154px), 1040px); min-width: 0;
+  position: relative; overflow: hidden; background: #f1ebdd; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 3px; }
+#frame { position: relative; line-height: 0; }
+#frame[data-interactive] { cursor: crosshair; touch-action: none; }
+canvas { display: block; }
+#plate, #wind { width: 100%; height: 100%; }
+#wind { position: absolute; inset: 0; pointer-events: none; }
+#busy { position: absolute; top: 12px; right: 12px; border-radius: 3px; padding: 5px 7px;
+  background: var(--paper); color: var(--accent); font: 10px var(--mono); opacity: 0; }
+#busy.on { opacity: 1; }
+.playback { display: flex; align-items: center; gap: 11px 16px; flex-wrap: wrap; padding: 5px 3px 0; }
+#play { min-width: 86px; background: var(--ink); color: white; border-color: var(--ink); }
+#mode-note { color: var(--muted); font-size: 12px; flex: 1; min-width: 128px; }
+#hud { font: 10px var(--mono); white-space: nowrap; color: var(--muted); }
+#hud b { color: var(--ink); font-weight: 500; }
+[hidden] { display: none !important; }
+.editor { display: grid; align-content: start; background: var(--panel); border-left: 1px solid var(--line); }
+.editor section { min-width: 0; border-bottom: 1px solid var(--line); padding: 15px clamp(12px, 1.45vw, 25px); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+#reroll { min-height: 35px; font-size: 12px; }
+.presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.preset { padding: 6px 2px 7px; display: grid; place-items: center; gap: 5px; background: var(--paper);
+  font-size: clamp(10px, 1vw, 12px); line-height: 1.2; }
+.preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: #802c20; }
+.preset canvas { width: min(100%, 64px); height: auto; pointer-events: none; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding-block: 3px; }
+.slider label { font-weight: 570; }
+.slider output { font: 11px var(--mono); color: var(--accent); align-self: center; text-align: right; }
+.slider input { grid-column: 1 / -1; min-height: 25px; }
+.advanced { margin-top: 11px; border-top: 1px solid var(--line); padding-top: 8px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details[open] summary { margin-bottom: 9px; }
+.seedrow { display: flex; gap: 9px; align-items: center; margin-top: 8px; font-size: 13px; }
+.seedrow input { width: 145px; background: var(--paper); padding: 5px 8px; color: var(--ink); }
+.checks { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 10px; font-size: 13px; }
+.formula-hero { background: #faf6ed; }
+.formula-card { border-top: 2px solid var(--accent); padding-top: 9px; }
+.formula-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
+.formula-heading h2 { font-size: 24px; }
+#term-count { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
+.eq { display: block; font-family: var(--serif); font-size: clamp(20px, 1.85vw, 29px); line-height: 1.28; }
+#first-term { display: block; padding: 7px 8px; margin-top: 8px; background: #f5e9dd; border-radius: 2px;
+  font: 12px/1.45 var(--mono); color: #742b20; overflow-wrap: anywhere; }
+#mix-summary, .formula-explain { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.formula-card details { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
+.formula-table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: right; font: 10px/1.6 var(--mono); white-space: nowrap; }
+th, td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+.term-selected { color: #742b20; background: var(--accent-soft); }
+.motion-equation { font: 11px/1.6 var(--mono); color: var(--accent); margin: 6px 0; }
+.editor [inert] { opacity: .6; }
+@media (max-width: 780px) {
+  .masthead { align-items: start; }
+  .masthead .exports { margin-top: 4px; }
+  .exports button { min-height: 35px; padding-inline: 8px; }
+  #app { grid-template-columns: minmax(0, 1fr); }
+  .studio { position: static; gap: 7px; padding: 11px 12px 13px; }
+  #stage { height: min(calc(100vw - 25px), 64svh); }
+  #hud { display: none; }
+  .editor { border-left: 0; border-top: 1px solid var(--line); }
+  .editor section { padding: 15px; }
+  .preset { min-height: 60px; font-size: 12px; }
+  .preset canvas { max-width: 58px; }
+  .slider input { min-height: 32px; }
+  .seedrow input { font-size: 16px; }
+}
+@media (max-width: 480px) {
+  .masthead { display: block; padding: 11px 13px 8px; }
+  .masthead h1 { font-size: 34px; }
+  .masthead .eyebrow { margin-bottom: 1px; }
+  .masthead .exports { justify-content: start; }
+  #mode-note { font-size: 11px; }
+}
 </style>
 </head>
 <body>
-<div id="app">
-  <div id="stage">
-    <div id="frame" role="group" aria-label="Wind engraving" aria-describedby="mode-note" aria-keyshortcuts="Space ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape" tabindex="0">
-      <canvas id="plate"></canvas>
-      <canvas id="wind"></canvas>
-    </div>
-    <div id="hud"><span><b id="nlines">0</b> lines</span><span><b id="npts">0</b> points</span><span>ψ&nbsp;=&nbsp;Σ&nbsp;a&#8342;&nbsp;sin(k&#8342;·x&nbsp;+&nbsp;φ&#8342;)</span></div>
-    <div id="busy">plotting</div>
+<header class="masthead">
+  <div>
+    <div class="eyebrow">Living engravings</div>
+    <h1>The Wind Press</h1>
   </div>
-
-  <aside>
-    <div class="head">
-      <h1>The Wind Press</h1>
-      <p>living engraving · a field in motion</p>
-    </div>
-
-    <div class="instrument">
-      <div class="modes" role="group" aria-label="Field mode">
-        <button data-mode="still" aria-pressed="false">Still</button>
-        <button data-mode="breathe" aria-pressed="false">Breathe</button>
-        <button data-mode="shape" aria-pressed="false">Shape</button>
+  <div class="exports" aria-label="Print and export">
+    <button id="capture">Capture plate</button>
+    <button id="save-png" aria-label="Download PNG">PNG</button>
+    <button id="save-svg" aria-label="Download SVG">SVG</button>
+  </div>
+</header>
+<main id="app">
+  <div class="studio">
+    <div id="stage">
+      <div id="frame" role="group" aria-label="Interactive wind engraving" aria-describedby="mode-note"
+           aria-keyshortcuts="Space ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape" tabindex="0">
+        <canvas id="plate" aria-hidden="true"></canvas>
+        <canvas id="wind" aria-hidden="true"></canvas>
       </div>
-      <p id="mode-note" aria-live="polite"></p>
+      <div id="busy">Plotting…</div>
     </div>
-    <div class="scroll">
-      <section>
-        <h2>Field</h2>
-        <div class="knobs" id="k-field"></div>
-      </section>
-
-      <section>
-        <h2>Engraving</h2>
-        <div class="knobs" id="k-line"></div>
-      </section>
-
-      <section>
-        <h2>Wind</h2>
-        <div class="knobs" id="k-wind"></div>
-      </section>
-
-      <section>
-        <h2>Plate</h2>
-        <div class="toggles">
-          <label class="tg"><input type="checkbox" id="t-furniture" checked><span>border &amp; caption</span></label>
-          <label class="tg"><input type="checkbox" id="t-wind" checked><span>flowing particles</span></label>
-          <label class="tg"><input type="checkbox" id="t-wheel" checked><span>mouse wheel on knobs</span></label>
+    <div class="playback">
+      <button id="play" type="button">Pause</button>
+      <p id="mode-note">Drag inside the circle to make a vortex.</p>
+      <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
+    </div>
+  </div>
+  <aside class="editor" aria-label="Pattern editor">
+    <section class="formula-hero">
+      <div class="formula-card">
+        <div class="formula-heading"><h2>Field formula</h2><span id="term-count"></span></div>
+        <div class="eq" id="field-equation">
+          ψ(x,y) = Σ A<sub>k</sub> sin(k<sub>x</sub>x + k<sub>y</sub>y + φ<sub>k</sub>)
         </div>
-      </section>
-    </div>
-
-    <div id="tool-actions">
-      <div class="capture"><button id="capture">Capture plate</button></div>
-      <div class="row">
-        <button id="reroll" class="primary">re-roll seed</button>
-        <button id="save-png" aria-label="Download PNG">png</button>
-        <button id="save-svg" aria-label="Download SVG">svg</button>
+        <code id="first-term"></code>
+        <p id="mix-summary"></p>
+        <details id="wave-details">
+          <summary>Every wave in this pattern</summary>
+          <p class="formula-explain">Wave size scales the broad waves. Adding ripples adds terms to the sum. The engraving follows the resulting field. Values are rounded for display.</p>
+          <div class="formula-table">
+            <table aria-label="Wave coefficients">
+              <thead><tr><th>Wave</th><th>A</th><th>kₓ</th><th>kᵧ</th><th>φ (rad)</th></tr></thead>
+              <tbody id="term-rows"></tbody>
+            </table>
+          </div>
+        </details>
+        <details>
+          <summary>How the field moves</summary>
+          <p class="formula-explain">The loop twists the contours at two points. Depth scales both twists. Dragging adds a temporary third.</p>
+          <div class="motion-equation" id="motion-equation"></div>
+          <p class="formula-explain">Keyboard: focus the plate, press Space to hold a vortex, move it with arrow keys, press Esc to release or Enter to capture.</p>
+        </details>
       </div>
-    </div>
-    <div class="foot">
-      drag a dial vertically · <b>shift</b> for fine adjustment
-    </div>
+    </section>
+    <section data-editable>
+      <div class="section-head">
+        <h2>Start with a pattern</h2>
+        <button id="reroll" type="button">New seed</button>
+      </div>
+      <div id="presets" class="presets" role="group" aria-label="Starting patterns"></div>
+    </section>
+    <section data-editable>
+      <div class="section-head"><h2>Mix the field</h2></div>
+      <div id="field-sliders"></div>
+      <details class="advanced">
+        <summary>More field and print controls</summary>
+        <div id="advanced-sliders"></div>
+        <div class="seedrow"><label for="seedval">Seed</label><input id="seedval" type="number" min="1" step="1"></div>
+        <div class="checks">
+          <label><input type="checkbox" id="t-furniture" checked> Border and caption</label>
+          <label><input type="checkbox" id="t-wind" checked> Moving particles</label>
+        </div>
+      </details>
+    </section>
   </aside>
-</div>
-
+</main>
 <script>
 (() => {
 'use strict';
@@ -229,6 +212,7 @@ const D = 1000;              // design units across the plate
 const CX = D / 2, CY = D / 2 - 24, R = 344;
 const PAPER = '#f1ebdd', INK = '#191410';
 const MAX_SEED = 0xffffffff;
+const VIEW_SPAN = 755;
 
 const params = {
   swirls: 3, swirlLam: 3.4,
@@ -238,7 +222,7 @@ const params = {
   seed: 20261117,
   particles: 900, speed: 1,
   furniture: true, wind: true,
-  wheel: true,
+  depth: 1, loopSeconds: 12,
 };
 
 // ───────────────────────────── rng ─────────────────────────────
@@ -270,15 +254,19 @@ function makeField(rnd, n, lamMin, lamMax, amp, out) {
   }
 }
 
+function createTerms(settings, random = mulberry32(settings.seed)) {
+  const terms = [];
+  const broad = settings.swirlLam;
+  const ripple = settings.detailLam;
+  makeField(random, settings.swirls, R * broad * 0.55, R * broad * 1.05, 1, terms);
+  makeField(random, settings.detail, R * ripple * 0.55, R * ripple * 1.05, .34, terms);
+  makeField(random, 3, R * .20, R * .36, settings.grain, terms);
+  return terms;
+}
+
 function buildField() {
   const rnd = mulberry32(params.seed);
-  const terms = [];
-  const s = params.swirlLam;
-  makeField(rnd, Math.round(params.swirls), R * s * 0.55, R * s * 1.05, 1.0, terms);
-  const m = params.detailLam;
-  makeField(rnd, Math.round(params.detail), R * m * 0.55, R * m * 1.05, 0.34, terms);
-  makeField(rnd, 3, R * 0.20, R * 0.36, params.grain, terms);
-  F.terms = terms;
+  F.terms = createTerms(params, rnd);
 
   // measure a typical gradient magnitude so stroke weight reads the same
   let acc = 0, n = 0;
@@ -290,9 +278,8 @@ function buildField() {
   F.speedScale = acc / n || 1;
 }
 
-function vel(x, y) {
+function vel(x, y, t = F.terms) {
   let gx = 0, gy = 0;
-  const t = F.terms;
   for (let i = 0; i < t.length; i++) {
     const c = Math.cos(t[i].kx * x + t[i].ky * y + t[i].p) * t[i].a;
     gx += c * t[i].kx;
@@ -352,8 +339,7 @@ let view = { scale: 1, dpr: 1, size: 0 };
 
 function fit() {
   const stage = document.getElementById('stage');
-  const pad = Math.min(stage.clientWidth, stage.clientHeight) < 640 ? 34 : 74;
-  const avail = Math.min(stage.clientWidth - pad, stage.clientHeight - pad - 26);
+  const avail = Math.min(stage.clientWidth, stage.clientHeight) - 6;
   const size = Math.max(1, Math.floor(avail));
   frame.style.width = size + 'px';
   frame.style.height = size + 'px';
@@ -362,7 +348,7 @@ function fit() {
     c.width = Math.round(size * dpr);
     c.height = Math.round(size * dpr);
   }
-  view = { scale: size / D, dpr, size };
+  view = { scale: size / VIEW_SPAN, dpr, size, x: CX - VIEW_SPAN / 2, y: CY - VIEW_SPAN / 2 };
   redrawAll();
 }
 
@@ -384,11 +370,12 @@ function strokePath(stroke, twists = []) {
 }
 
 function execStroke(ctx, stroke, settings, twists) {
+  const path = twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke));
   ctx.strokeStyle = INK;
   ctx.globalAlpha = Math.min(1, stroke.a * settings.ink);
   ctx.lineWidth = stroke.w * settings.weight;
   ctx.lineCap = 'round';
-  ctx.stroke(twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke)));
+  ctx.stroke(path);
 }
 
 function paintPaper(ctx, w, h) {
@@ -409,20 +396,20 @@ function plateState() {
   };
 }
 
-function startPainting(ctx, scale) {
+function startPainting(ctx, scale, x = 0, y = 0) {
   paintPaper(ctx, ctx.canvas.width, ctx.canvas.height);
-  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.setTransform(scale, 0, 0, scale, -x * scale, -y * scale);
 }
 
-function paintPlate(ctx, scale, state) {
-  startPainting(ctx, scale);
+function paintPlate(ctx, scale, state, x = 0, y = 0) {
+  startPainting(ctx, scale, x, y);
   for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists);
   ctx.globalAlpha = 1;
   if (state.settings.furniture) drawFurniture(ctx, state);
 }
 
 function redrawAll() {
-  paintPlate(pctx, view.dpr * view.scale, captured || plateState());
+  paintPlate(pctx, view.dpr * view.scale, captured || plateState(), view.x, view.y);
 }
 
 // ───────────────────────────── furniture ─────────────────────────────
@@ -499,7 +486,10 @@ let raf = 0;
 function startPlot() {
   if (captured) return;
   plotTimer = 0;
+  cancelAnimationFrame(raf);
   buildField();
+  refreshFormula();
+  clearParticles();
   strokes = [];
   renderedTwists = [];
   stats = { lines: 0, pts: 0 };
@@ -533,7 +523,7 @@ function startPlot() {
 
   job = { dsep, seeds, i: 0 };
   syncInstrument();
-  startPainting(pctx, view.dpr * view.scale);
+  startPainting(pctx, view.dpr * view.scale, view.x, view.y);
   busy.classList.add('on');
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
@@ -604,16 +594,14 @@ function tick() {
     job = null;
     busy.classList.remove('on');
     pctx.globalAlpha = 1;
-    redrawAll();
+    renderPosition();
     syncInstrument();
     requestMotion();
   }
 }
 
 // ───────────────────────────── living field ─────────────────────────────
-// A radial twist adds an angle that depends only on distance from its center.
-// It preserves area and is the identity outside its radius. Applying the same
-// map to the engraving and the tracer particles keeps their trajectories aligned.
+// Apply the same radial deformation to the engraving and its tracers.
 function deform(x, y, twists, out) {
   for (const { x: originX, y: originY, inverseRadiusSquared, strength } of twists) {
     const dx = x - originX;
@@ -631,14 +619,14 @@ function deform(x, y, twists, out) {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-const modeButtons = [...document.querySelectorAll('[data-mode]')];
+const playButton = document.getElementById('play');
 const note = document.getElementById('mode-note');
 const captureButton = document.getElementById('capture');
-const controls = document.querySelector('.scroll');
+const controls = document.querySelectorAll('[data-editable]');
 const reroll = document.getElementById('reroll');
 const pngButton = document.getElementById('save-png');
 const svgButton = document.getElementById('save-svg');
-let mode = reducedMotion.matches ? 'still' : 'breathe';
+let playing = !reducedMotion.matches;
 let captured = null;
 let renderedTwists = [];
 let motionFrame = 0;
@@ -654,9 +642,10 @@ function twist(x, y, radius, strength) {
 
 function currentTwists() {
   const twists = [];
-  if (mode === 'breathe') {
-    twists.push(twist(CX - 65, CY - 22, R - 69, Math.sin(phase * 0.71) * 1.03));
-    twists.push(twist(CX + 94, CY + 50, R - 108, -Math.sin(phase * 0.93) * 0.94));
+  if (params.depth > 0) {
+    const a = 2 * Math.PI * phase;
+    twists.push(twist(CX - 65, CY - 22, R - 69, Math.sin(a) * 1.03 * params.depth));
+    twists.push(twist(CX + 94, CY + 50, R - 108, -Math.sin(2 * a) * 0.94 * params.depth));
   }
   if (Math.abs(vortex.strength) > 0.003) {
     const radius = Math.min(206, R - Math.hypot(vortex.x - CX, vortex.y - CY));
@@ -698,11 +687,12 @@ function drawParticles(dt) {
   const from = [0, 0];
   const to = [0, 0];
   wctx.globalCompositeOperation = 'source-over';
-  wctx.setTransform(scale, 0, 0, scale, 0, 0);
+  wctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
   wctx.strokeStyle = 'rgba(166, 58, 41, .58)';
   wctx.lineWidth = 1.45;
   wctx.lineCap = 'round';
   wctx.beginPath();
+  const travel = 1.6 * params.speed * dt;
   for (const particle of particles) {
     const direction = unit(particle.x, particle.y);
     if (!direction) {
@@ -710,8 +700,8 @@ function drawParticles(dt) {
       continue;
     }
     deform(particle.x, particle.y, renderedTwists, from);
-    particle.x += direction[0] * 1.6 * params.speed * dt;
-    particle.y += direction[1] * 1.6 * params.speed * dt;
+    particle.x += direction[0] * travel;
+    particle.y += direction[1] * travel;
     particle.life -= dt;
     if (particle.life <= 0 || (particle.x - CX) ** 2 + (particle.y - CY) ** 2 > R * R) {
       seedParticle(particle);
@@ -725,7 +715,7 @@ function drawParticles(dt) {
 }
 
 function canMove() {
-  return mode !== 'still' && !captured && !job && !document.hidden;
+  return !captured && !job && !plotTimer && !document.hidden;
 }
 
 function requestMotion() {
@@ -741,64 +731,49 @@ function animate(time) {
 
   const dt = lastMotionTime ? Math.min((time - lastMotionTime) / 1000, 0.05) : 1 / 60;
   lastMotionTime = time;
-  if (mode === 'breathe') phase += dt;
+  if (playing) phase = (phase + dt / params.loopSeconds) % 1;
   const target = vortex.held ? vortex.direction * 3.1 : 0;
   vortex.strength += (target - vortex.strength) * (1 - Math.exp(-dt * (vortex.held ? 10 : 1.8)));
   const twists = currentTwists();
-  if (time >= nextEngraving && (twists.length || renderedTwists.length)) {
+  if (time >= nextEngraving) {
     const before = performance.now();
+    const needsRedraw = twists.length || renderedTwists.length;
     renderedTwists = twists;
-    redrawAll();
+    if (needsRedraw) redrawAll();
+    updateMotionEquation();
     const cost = performance.now() - before;
     // Leave time for inputs and particle playback even on a densely plotted plate.
     nextEngraving = time + Math.max(32, Math.min(150, cost * 2.4));
   }
-  drawParticles(dt * 60);
-  if (mode === 'breathe' || vortex.held || renderedTwists.length || (params.wind && particles.length)) {
+  if (playing || vortex.held || Math.abs(vortex.strength) > .003) {
+    drawParticles(dt * 60);
     requestMotion();
   } else {
+    renderPosition();
     lastMotionTime = 0;
   }
 }
 
 function syncInstrument() {
   const plotting = Boolean(job || plotTimer);
-  const interactive = mode !== 'still' && !captured;
-  frame.toggleAttribute('data-interactive', interactive);
+  frame.toggleAttribute('data-interactive', !captured && !plotting);
   frame.toggleAttribute('data-frozen', Boolean(captured));
-  for (const button of modeButtons) {
-    button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
-    button.disabled = Boolean(captured);
-  }
-  if (captured) note.textContent = 'Plate captured. Download this engraving or resume the field.';
-  else if (mode === 'still') note.textContent = 'The field is at rest.';
-  else if (mode === 'shape') note.textContent = 'Press and drag to make a vortex. With the plate focused, use Space and the arrow keys.';
-  else note.textContent = 'Watch the engraving drift. Press and drag inside the circle to stir the field.';
-  captureButton.textContent = captured ? 'Resume field' : 'Capture plate';
+  note.textContent = captured
+    ? 'Plate captured. Choose PNG or SVG to download.'
+    : 'Drag inside the circle to make a vortex.';
+  playButton.textContent = playing ? 'Ⅱ Pause' : '▶ Play';
+  playButton.setAttribute('aria-label', playing ? 'Pause loop' : 'Play loop');
+  playButton.disabled = Boolean(captured);
+  captureButton.textContent = captured ? 'Back to editing' : 'Capture plate';
   captureButton.disabled = plotting;
   pngButton.disabled = plotting;
   svgButton.disabled = plotting;
-  reroll.disabled = Boolean(captured);
-  controls.inert = Boolean(captured);
+  for (const section of controls) section.inert = Boolean(captured);
 }
 
 function releaseVortex() {
   vortex.pointerId = null;
   vortex.held = false;
-}
-
-function chooseMode(nextMode) {
-  if (captured || mode === nextMode) return;
-  mode = nextMode;
-  releaseVortex();
-  vortex.strength = 0;
-  renderedTwists = [];
-  lastMotionTime = 0;
-  nextEngraving = 0;
-  if (!job) redrawAll();
-  syncInstrument();
-  if (mode === 'still') clearParticles();
-  else requestMotion();
 }
 
 function moveVortex(x, y) {
@@ -812,7 +787,10 @@ function moveVortex(x, y) {
 
 function platePoint(event) {
   const bounds = frame.getBoundingClientRect();
-  return [(event.clientX - bounds.left) * D / bounds.width, (event.clientY - bounds.top) * D / bounds.height];
+  return [
+    view.x + (event.clientX - bounds.left) * VIEW_SPAN / bounds.width,
+    view.y + (event.clientY - bounds.top) * VIEW_SPAN / bounds.height,
+  ];
 }
 
 frame.addEventListener('pointerdown', event => {
@@ -859,9 +837,11 @@ frame.addEventListener('blur', () => {
   if (vortex.pointerId === null) releaseVortex();
 });
 
-for (const button of modeButtons) button.addEventListener('click', () => chooseMode(button.dataset.mode));
 reducedMotion.addEventListener('change', event => {
-  if (event.matches) chooseMode('still');
+  if (!event.matches) return;
+  playing = false;
+  lastMotionTime = 0;
+  syncInstrument();
 });
 document.addEventListener('visibilitychange', () => {
   lastMotionTime = 0;
@@ -875,7 +855,8 @@ captureButton.addEventListener('click', () => {
     captured = null;
     lastMotionTime = 0;
     nextEngraving = 0;
-    requestMotion();
+    if (playing) requestMotion();
+    else renderPosition();
   } else {
     captured = plateState();
     releaseVortex();
@@ -884,213 +865,241 @@ captureButton.addEventListener('click', () => {
   syncInstrument();
 });
 
-// ───────────────────────────── knobs ─────────────────────────────
-function arc(cx, cy, r, a0, a1) {
-  const x0 = cx + Math.cos(a0) * r, y0 = cy + Math.sin(a0) * r;
-  const x1 = cx + Math.cos(a1) * r, y1 = cy + Math.sin(a1) * r;
-  const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
-  const sweep = a1 > a0 ? 1 : 0;
-  return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${r} ${r} 0 ${large} ${sweep} ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+const presets = [
+  { name: 'Estuary', swirls: 3, swirlLam: 3.4, detail: 3, detailLam: .75, grain: .09, seed: 20261117 },
+  { name: 'Silk', swirls: 2, swirlLam: 4.7, detail: 1, detailLam: 1.15, grain: .022, seed: 98412 },
+  { name: 'Eddies', swirls: 5, swirlLam: 1.8, detail: 2, detailLam: .85, grain: .07, seed: 62401 },
+  { name: 'Squall', swirls: 4, swirlLam: 2.5, detail: 6, detailLam: .54, grain: .24, seed: 61902 },
+];
+let selectedPreset = 0;
+let formulaGroup = 'broad';
+const sliderBindings = [];
+
+function signed(value, decimals, suffix = '') {
+  return (value < 0 ? ' − ' : ' + ') + Math.abs(value).toFixed(decimals) + suffix;
 }
 
-const A0 = Math.PI * 0.75, A1 = Math.PI * 2.25;  // 270° sweep
-const registry = new Map();
-
-function makeKnob(spec) {
-  const wrap = document.createElement('div');
-  wrap.className = 'knob';
-  wrap.tabIndex = 0;
-  wrap.setAttribute('role', 'slider');
-  wrap.setAttribute('aria-label', spec.label);
-  wrap.setAttribute('aria-valuemin', spec.min);
-  wrap.setAttribute('aria-valuemax', spec.max);
-
-  const SIZE = 46, R0 = 17;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', SIZE);
-  svg.setAttribute('height', SIZE);
-  svg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
-
-  const track = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  track.setAttribute('d', arc(SIZE / 2, SIZE / 2, R0, A0, A1));
-  track.setAttribute('fill', 'none');
-  track.setAttribute('stroke', 'rgba(25,20,16,.16)');
-  track.setAttribute('stroke-width', '2');
-  track.setAttribute('stroke-linecap', 'round');
-
-  const fill = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  fill.setAttribute('fill', 'none');
-  fill.setAttribute('stroke', '#a63a29');
-  fill.setAttribute('stroke-width', '2');
-  fill.setAttribute('stroke-linecap', 'round');
-
-  const needle = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  needle.setAttribute('stroke', '#191410');
-  needle.setAttribute('stroke-width', '1.6');
-  needle.setAttribute('stroke-linecap', 'round');
-
-  const hub = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  hub.setAttribute('cx', SIZE / 2); hub.setAttribute('cy', SIZE / 2);
-  hub.setAttribute('r', '2');
-  hub.setAttribute('fill', '#191410');
-
-  svg.append(track, fill, needle, hub);
-
-  const lab = document.createElement('div');
-  lab.className = 'lab'; lab.textContent = spec.label;
-  const val = document.createElement('div');
-  val.className = 'val';
-  wrap.append(svg, lab, val);
-
-  const fmt = spec.fmt || (v => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)));
-  let value = params[spec.key];
-
-  function render() {
-    const t = (value - spec.min) / (spec.max - spec.min);
-    const ang = A0 + (A1 - A0) * t;
-    fill.setAttribute('d', t < 0.001 ? '' : arc(SIZE / 2, SIZE / 2, R0, A0, ang));
-    const nx = SIZE / 2 + Math.cos(ang) * (R0 - 4.5);
-    const ny = SIZE / 2 + Math.sin(ang) * (R0 - 4.5);
-    needle.setAttribute('x1', SIZE / 2); needle.setAttribute('y1', SIZE / 2);
-    needle.setAttribute('x2', nx.toFixed(2)); needle.setAttribute('y2', ny.toFixed(2));
-    val.textContent = fmt(value);
-    wrap.setAttribute('aria-valuenow', value);
-    wrap.setAttribute('aria-valuetext', fmt(value));
-  }
-
-  function set(v, silent) {
-    v = Math.min(spec.max, Math.max(spec.min, v));
-    if (spec.step) v = Math.round(v / spec.step) * spec.step;
-    if (v === value) return;
-    value = v;
-    params[spec.key] = v;
-    render();
-    if (!silent) schedule(spec.effect);
-  }
-
-  let dragging = false, startY = 0, startV = 0;
-  wrap.addEventListener('pointerdown', e => {
-    dragging = true;
-    startY = e.clientY; startV = value;
-    wrap.classList.add('act');
-    wrap.setPointerCapture(e.pointerId);
-    e.preventDefault();
+function refreshFormula() {
+  const terms = F.terms;
+  const grainStart = params.swirls + params.detail;
+  const index = formulaGroup === 'grain' ? grainStart
+    : formulaGroup === 'ripple' && params.detail ? params.swirls : 0;
+  const wave = terms[index];
+  document.getElementById('term-count').textContent = terms.length + ' waves';
+  document.getElementById('first-term').textContent =
+    'Wave ' + (index + 1) + ' ≈ ' + wave.a.toFixed(2) + ' sin(' +
+    wave.kx.toFixed(5).replace('-', '−') + 'x' +
+    signed(wave.ky, 5, 'y') + signed(wave.p, 3) + ')';
+  document.getElementById('mix-summary').textContent =
+    params.swirls + ' broad + ' + params.detail + ' ripple + 3 grain waves';
+  const rows = terms.map((wave, i) => {
+    const row = document.createElement('tr');
+    const group = i < params.swirls ? 'Broad' : i < params.swirls + params.detail ? 'Ripple' : 'Grain';
+    const groupCell = document.createElement('th');
+    groupCell.scope = 'row';
+    groupCell.textContent = (i + 1) + ' · ' + group;
+    row.append(groupCell);
+    if (i === index) row.className = 'term-selected';
+    for (const [value, precision] of [[wave.a, 2], [wave.kx, 5], [wave.ky, 5], [wave.p, 3]]) {
+      const cell = document.createElement('td');
+      cell.textContent = value.toFixed(precision).replace('-', '−');
+      row.append(cell);
+    }
+    return row;
   });
-  wrap.addEventListener('pointermove', e => {
-    if (!dragging) return;
-    const fine = e.shiftKey ? 0.16 : 1;
-    const span = spec.max - spec.min;
-    const dy = startY - e.clientY;
-    set(startV + (dy / 380) * span * fine);
-  });
-  const end = () => { dragging = false; wrap.classList.remove('act'); };
-  wrap.addEventListener('pointerup', end);
-  wrap.addEventListener('pointercancel', end);
-
-  wrap.addEventListener('wheel', e => {
-    if (!params.wheel) return;
-    e.preventDefault();
-    const span = spec.max - spec.min;
-    const inc = spec.step ? spec.step : span * (e.shiftKey ? 0.006 : 0.03);
-    set(value + Math.sign(-e.deltaY) * inc);
-  }, { passive: false });
-
-  wrap.addEventListener('keydown', e => {
-    const span = spec.max - spec.min;
-    const increment = spec.step || span * 0.02;
-    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') set(value + increment);
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') set(value - increment);
-    else if (e.key === 'Home') set(spec.min);
-    else if (e.key === 'End') set(spec.max);
-    else return;
-    e.preventDefault();
-  });
-
-  render();
-  registry.set(spec.key, {
-    refresh() { value = params[spec.key]; render(); },
-    set,
-  });
-  return wrap;
+  document.getElementById('term-rows').replaceChildren(...rows);
 }
 
-// ───────────────────────────── wiring ─────────────────────────────
+function updateMotionEquation() {
+  if (!motionDetails.open) return;
+  const depth = params.depth;
+  const seconds = params.loopSeconds;
+  const time = (phase * seconds).toFixed(1);
+  document.getElementById('motion-equation').textContent =
+    't = ' + time + ' s, T = ' + seconds.toFixed(1) + ' s · ' +
+    'twist 1 ≈ ' + (1.03 * depth).toFixed(2) + ' sin(2πt/T) · ' +
+    'twist 2 ≈ −' + (.94 * depth).toFixed(2) + ' sin(4πt/T)';
+}
+const motionDetails = document.querySelector('#motion-equation').closest('details');
+motionDetails.addEventListener('toggle', updateMotionEquation);
+
+function renderPosition() {
+  if (job || captured) return;
+  renderedTwists = currentTwists();
+  redrawAll();
+  clearParticles();
+  updateMotionEquation();
+}
+
 let plotTimer = 0;
-function schedule(effect) {
-  if (effect === 'restyle') { redrawAll(); return; }
-  if (effect === 'wind') {
-    resetParticles();
-    requestMotion();
-    return;
-  }
+function schedulePlot() {
   clearTimeout(plotTimer);
-  plotTimer = setTimeout(startPlot, 55);
+  plotTimer = setTimeout(startPlot, 70);
   syncInstrument();
 }
 
-const KNOBS = {
-  'k-field': [
-    { key: 'swirls', label: 'swirls', min: 1, max: 6, step: 1, fmt: v => v.toFixed(0) },
-    { key: 'swirlLam', label: 'swirl size', min: 0.6, max: 5.0 },
-    { key: 'detail', label: 'detail', min: 0, max: 6, step: 1, fmt: v => v.toFixed(0) },
-    { key: 'detailLam', label: 'detail size', min: 0.2, max: 1.6 },
-    { key: 'grain', label: 'grain', min: 0, max: 0.4, fmt: v => v.toFixed(3) },
-    { key: 'spacing', label: 'spacing', min: 1.8, max: 14, effect: 'replot' },
-  ],
-  'k-line': [
-    { key: 'weight', label: 'weight', min: 0.3, max: 2.4, effect: 'restyle' },
-    { key: 'ink', label: 'ink', min: 0.3, max: 1, effect: 'restyle' },
-  ],
-  'k-wind': [
-    { key: 'particles', label: 'particles', min: 0, max: 2600, step: 50, fmt: v => v.toFixed(0), effect: 'wind' },
-    { key: 'speed', label: 'speed', min: 0.1, max: 3.5, effect: 'wind' },
-  ],
-};
-
-for (const [id, specs] of Object.entries(KNOBS)) {
-  const host = document.getElementById(id);
-  for (const spec of specs) host.appendChild(makeKnob(spec));
+function updatePresetButtons() {
+  for (const [i, button] of [...presetGallery.children].entries()) {
+    button.setAttribute('aria-pressed', String(i === selectedPreset));
+  }
 }
 
-const fieldSection = document.getElementById('k-field').parentElement;
-const seedRow = document.createElement('div');
-seedRow.className = 'seedrow';
-seedRow.innerHTML =
-  `<label for="seedval">Seed</label><input id="seedval" type="number" min="1" max="${MAX_SEED}" step="1">` +
-  '<button id="dice" aria-label="Re-roll seed">⟳</button>';
-fieldSection.appendChild(seedRow);
-const seedInput = seedRow.querySelector('#seedval');
-seedInput.value = params.seed;
+function setPattern(preset, index) {
+  const { name, ...settings } = preset;
+  Object.assign(params, settings);
+  releaseVortex();
+  vortex.strength = 0;
+  selectedPreset = index;
+  formulaGroup = 'broad';
+  updatePresetButtons();
+  for (const refresh of sliderBindings) refresh();
+  seedInput.value = params.seed;
+  phase = 0;
+  updateMotionEquation();
+  clearTimeout(plotTimer);
+  startPlot();
+}
 
+// A quick miniature of the same seeded field, traced at low resolution.
+function drawThumbnail(canvas, settings) {
+  const ctx = canvas.getContext('2d');
+  const terms = createTerms(settings);
+  const random = mulberry32(settings.seed ^ 0x2698393e);
+  const radius = 29;
+  ctx.scale(2, 2);
+  ctx.translate(34, 34);
+  ctx.beginPath();
+  ctx.arc(0, 0, radius + .5, 0, Math.PI * 2);
+  ctx.strokeStyle = '#7e7260';
+  ctx.lineWidth = .55;
+  ctx.stroke();
+  ctx.strokeStyle = '#3b352c';
+  ctx.lineWidth = .42;
+  ctx.beginPath();
+  for (let i = 0; i < 59; i++) {
+    const angle = random() * 2 * Math.PI;
+    const distance = Math.sqrt(random()) * radius;
+    let x = Math.cos(angle) * distance, y = Math.sin(angle) * distance;
+    ctx.moveTo(x, y);
+    for (let step = 0; step < 37; step++) {
+      const [vx, vy] = vel(CX + x * R / radius, CY + y * R / radius, terms);
+      const speed = Math.hypot(vx, vy);
+      if (speed < 1e-6) break;
+      x += vx / speed * 1.1;
+      y += vy / speed * 1.1;
+      if (x * x + y * y > radius * radius) break;
+      ctx.lineTo(x, y);
+    }
+  }
+  ctx.stroke();
+}
+
+const presetGallery = document.getElementById('presets');
+for (const [index, preset] of presets.entries()) {
+  const button = document.createElement('button');
+  button.className = 'preset';
+  button.type = 'button';
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 136;
+  canvas.setAttribute('aria-hidden', 'true');
+  button.append(canvas, preset.name);
+  button.addEventListener('click', () => setPattern(preset, index));
+  presetGallery.append(button);
+  drawThumbnail(canvas, { ...params, ...preset });
+}
+updatePresetButtons();
+
+const patternKeys = new Set(['swirls', 'swirlLam', 'detail', 'detailLam', 'grain']);
+const sliders = [
+  ['field-sliders', 'swirlLam', 'Wave size', .6, 5, .1, v => v.toFixed(1) + ' × radius', 'plot'],
+  ['field-sliders', 'detail', 'Ripple waves', 0, 6, 1, v => String(v), 'plot'],
+  ['field-sliders', 'depth', 'Loop depth', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
+  ['advanced-sliders', 'loopSeconds', 'Loop duration', 3, 30, .5, v => v.toFixed(1) + ' s', 'motion'],
+  ['advanced-sliders', 'swirls', 'Broad waves', 1, 6, 1, v => String(v), 'plot'],
+  ['advanced-sliders', 'detailLam', 'Ripple size', .2, 1.6, .05, v => v.toFixed(2) + ' × radius', 'plot'],
+  ['advanced-sliders', 'grain', 'Grain strength', 0, .4, .005, v => Math.round(v * 100) + '%', 'plot'],
+  ['advanced-sliders', 'spacing', 'Ink spacing', 1.8, 14, .1, v => v.toFixed(1), 'plot'],
+  ['advanced-sliders', 'weight', 'Line weight', .3, 2.4, .05, v => v.toFixed(2), 'print'],
+  ['advanced-sliders', 'ink', 'Ink opacity', .3, 1, .05, v => Math.round(v * 100) + '%', 'print'],
+  ['advanced-sliders', 'particles', 'Particle count', 0, 2600, 50, v => String(v), 'particles'],
+  ['advanced-sliders', 'speed', 'Particle speed', .1, 3.5, .1, v => v.toFixed(1) + '×', 'particles'],
+];
+
+for (const [parent, key, labelText, min, max, step, format, effect] of sliders) {
+  const row = document.createElement('div');
+  row.className = 'slider';
+  const input = document.createElement('input');
+  input.type = 'range';
+  input.id = 'setting-' + key;
+  input.min = min;
+  input.max = max;
+  input.step = step;
+  const label = document.createElement('label');
+  label.htmlFor = input.id;
+  label.textContent = labelText;
+  const output = document.createElement('output');
+  output.htmlFor = input.id;
+  output.setAttribute('aria-hidden', 'true');
+  function refresh() {
+    input.value = params[key];
+    output.textContent = format(params[key]);
+    input.setAttribute('aria-valuetext', output.textContent);
+  }
+  sliderBindings.push(refresh);
+  refresh();
+  input.addEventListener('input', () => {
+    params[key] = input.valueAsNumber;
+    refresh();
+    if (patternKeys.has(key)) {
+      formulaGroup = key === 'grain' ? 'grain'
+        : key === 'detail' || key === 'detailLam' ? 'ripple' : 'broad';
+      selectedPreset = -1;
+      updatePresetButtons();
+    }
+    if (effect === 'plot') schedulePlot();
+    else if (effect === 'motion') renderPosition();
+    else if (effect === 'print') redrawAll();
+    else {
+      resetParticles();
+      requestMotion();
+    }
+  });
+  row.append(label, output, input);
+  document.getElementById(parent).append(row);
+}
+
+const seedInput = document.getElementById('seedval');
+seedInput.max = MAX_SEED;
+seedInput.value = params.seed;
 function applySeed(value) {
   const seed = Number.isFinite(value) ? Math.max(1, Math.min(MAX_SEED, Math.round(value))) : params.seed;
   seedInput.value = seed;
-  if (seed === params.seed) return;
+  if (params.seed === seed) return;
   params.seed = seed;
-  schedule();
-}
-
-function rerollSeed() {
-  applySeed(1 + Math.floor(Math.random() * MAX_SEED));
+  selectedPreset = -1;
+  updatePresetButtons();
+  schedulePlot();
 }
 seedInput.addEventListener('change', () => applySeed(seedInput.valueAsNumber));
-seedRow.querySelector('#dice').addEventListener('click', rerollSeed);
-reroll.addEventListener('click', rerollSeed);
+reroll.addEventListener('click', () => applySeed(1 + Math.floor(Math.random() * MAX_SEED)));
 
 document.getElementById('t-furniture').addEventListener('change', event => {
   params.furniture = event.target.checked;
   redrawAll();
 });
-const particleToggle = document.getElementById('t-wind');
-particleToggle.addEventListener('change', event => {
+document.getElementById('t-wind').addEventListener('change', event => {
   params.wind = event.target.checked;
   if (params.wind) {
     resetParticles();
     requestMotion();
   } else clearParticles();
 });
-document.getElementById('t-wheel').addEventListener('change', event => {
-  params.wheel = event.target.checked;
+
+playButton.addEventListener('click', () => {
+  playing = !playing;
+  lastMotionTime = 0;
+  syncInstrument();
+  if (playing) requestMotion();
 });
 
 function xml(text) {
