@@ -18,8 +18,18 @@
   --line: #d3cbb9;
   --accent: #a03a2b;
   --accent-soft: #f3e0d5;
+  --hero: #faf6ed;
+  --on-accent: #fffdf6;
+  --print-paper: #f1ebdd;
   --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #151d24; --panel: #1b262e; --hero: #202d35;
+  --ink: #f6edda; --muted: #b4c1c5; --line: #425159;
+  --accent: #ffab86; --accent-soft: #433333; --on-accent: #291c17;
+  --print-paper: #101a22;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
@@ -44,13 +54,13 @@ h2 { font-size: 24px; letter-spacing: -.035em; }
 .masthead .eyebrow { margin-bottom: 3px; }
 .exports { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: end; }
 .exports button { font-size: 12px; }
-#capture { background: var(--accent); color: #fffdf6; border-color: var(--accent); }
-#capture:hover:not(:disabled) { background: #7f2d22; }
+#capture { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+#capture:hover:not(:disabled) { filter: brightness(.92); }
 #app { display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, 27%); max-width: 1620px; margin: auto; }
 .studio { position: sticky; align-self: start; top: 0; min-width: 0;
   display: grid; gap: 6px; padding: 8px 12px 12px; }
 #stage { height: clamp(300px, calc(100svh - 154px), 1040px); min-width: 0;
-  position: relative; overflow: hidden; background: #f1ebdd; display: grid; place-items: center;
+  position: relative; overflow: hidden; background: var(--plate-surround, var(--print-paper)); display: grid; place-items: center;
   border: 1px solid var(--line); border-radius: 3px; }
 #frame { position: relative; line-height: 0; }
 #frame[data-interactive] { cursor: crosshair; touch-action: none; }
@@ -61,7 +71,7 @@ canvas { display: block; }
   background: var(--paper); color: var(--accent); font: 10px var(--mono); opacity: 0; }
 #busy.on { opacity: 1; }
 .playback { display: flex; align-items: center; gap: 11px 16px; flex-wrap: wrap; padding: 5px 3px 0; }
-#play { min-width: 86px; background: var(--ink); color: white; border-color: var(--ink); }
+#play { min-width: 86px; background: var(--ink); color: var(--paper); border-color: var(--ink); }
 #mode-note { color: var(--muted); font-size: 12px; flex: 1; min-width: 128px; }
 #hud { font: 10px var(--mono); white-space: nowrap; color: var(--muted); }
 #hud b { color: var(--ink); font-weight: 500; }
@@ -73,7 +83,7 @@ canvas { display: block; }
 .presets { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
 .preset { padding: 6px 2px 7px; display: grid; place-items: center; gap: 5px; background: var(--paper);
   font-size: clamp(10px, 1vw, 12px); line-height: 1.2; }
-.preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: #802c20; }
+.preset[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .preset canvas { width: min(100%, 64px); height: auto; pointer-events: none; }
 .slider { display: grid; grid-template-columns: 1fr auto; gap: 0 8px; padding-block: 3px; }
 .slider label { font-weight: 570; }
@@ -85,23 +95,36 @@ details[open] summary { margin-bottom: 9px; }
 .seedrow { display: flex; gap: 9px; align-items: center; margin-top: 8px; font-size: 13px; }
 .seedrow input { width: 145px; background: var(--paper); padding: 5px 8px; color: var(--ink); }
 .checks { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-top: 10px; font-size: 13px; }
-.formula-hero { background: #faf6ed; }
+.formula-hero { background: var(--hero); }
 .formula-card { border-top: 2px solid var(--accent); padding-top: 9px; }
 .formula-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 8px; }
 .formula-heading h2 { font-size: 24px; }
 #term-count { font: 10px var(--mono); color: var(--muted); white-space: nowrap; }
 .eq { display: block; font-family: var(--serif); font-size: clamp(20px, 1.85vw, 29px); line-height: 1.28; }
-#first-term { display: block; padding: 7px 8px; margin-top: 8px; background: #f5e9dd; border-radius: 2px;
-  font: 12px/1.45 var(--mono); color: #742b20; overflow-wrap: anywhere; }
+#first-term { display: block; padding: 7px 8px; margin-top: 8px; background: var(--accent-soft); border-radius: 2px;
+  font: 12px/1.45 var(--mono); color: var(--accent); overflow-wrap: anywhere; }
 #mix-summary, .formula-explain { font-size: 12px; color: var(--muted); margin-top: 8px; }
 .formula-card details { border-top: 1px solid var(--line); margin-top: 9px; padding-top: 8px; }
 .formula-table { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; text-align: right; font: 10px/1.6 var(--mono); white-space: nowrap; }
 th, td { padding: 3px 4px; border-bottom: 1px solid var(--line); }
 th:first-child, td:first-child { text-align: left; }
-.term-selected { color: #742b20; background: var(--accent-soft); }
+.term-selected { color: var(--accent); background: var(--accent-soft); }
 .motion-equation { font: 11px/1.6 var(--mono); color: var(--accent); margin: 6px 0; }
 .editor [inert] { opacity: .6; }
+.ink-desk { border-top: 1px solid var(--line); margin-top: 4px; padding: 8px 3px 0;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.ink-desk h2 { font-size: 21px; }
+.ink-options { display: flex; gap: 4px; }
+.ink-options button { min-height: 40px; font-size: 12px; }
+.ink-options button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.ink-key { flex: 1; min-width: 150px; max-width: 260px; }
+.ink-key .ramp { display: flex; height: 5px; border-radius: 2px; overflow: hidden; }
+.ramp i { flex: 1; }
+.key-labels { display: flex; justify-content: space-between; margin-top: 2px; color: var(--muted); font: 11px var(--mono); }
+#ink-note { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+#theme { margin-inline-start: 5px; }
+@media (min-width: 781px) { #stage { height: clamp(300px, calc(100svh - 238px), 1040px); } }
 @media (max-width: 780px) {
   .masthead { align-items: start; }
   .masthead .exports { margin-top: 4px; }
@@ -132,10 +155,11 @@ th:first-child, td:first-child { text-align: left; }
     <div class="eyebrow">Living engravings</div>
     <h1>The Wind Press</h1>
   </div>
-  <div class="exports" aria-label="Print and export">
+  <div class="exports" aria-label="Studio actions">
     <button id="capture">Capture plate</button>
     <button id="save-png" aria-label="Download PNG">PNG</button>
     <button id="save-svg" aria-label="Download SVG">SVG</button>
+    <button id="theme" type="button" aria-pressed="false">Dark mode</button>
   </div>
 </header>
 <main id="app">
@@ -153,6 +177,16 @@ th:first-child, td:first-child { text-align: left; }
       <p id="mode-note">Drag inside the circle to make a vortex.</p>
       <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
     </div>
+    <section class="ink-desk" aria-labelledby="ink-title" data-editable>
+      <h2 id="ink-title">Field ink</h2>
+      <div class="ink-options" role="group" aria-labelledby="ink-title" aria-describedby="ink-note">
+        <button type="button" data-ink="level">Contour</button>
+        <button type="button" data-ink="speed">Speed</button>
+        <button type="button" data-ink="mono">Mono</button>
+      </div>
+      <div class="ink-key" aria-hidden="true"><div class="ramp"></div><div class="key-labels"><span></span><span></span></div></div>
+      <p id="ink-note"></p>
+    </section>
   </div>
   <aside class="editor" aria-label="Pattern editor">
     <section class="formula-hero">
@@ -196,7 +230,7 @@ th:first-child, td:first-child { text-align: left; }
         <div id="advanced-sliders"></div>
         <div class="seedrow"><label for="seedval">Seed</label><input id="seedval" type="number" min="1" step="1"></div>
         <div class="checks">
-          <label><input type="checkbox" id="t-furniture" checked> Border and caption</label>
+          <label><input type="checkbox" id="t-furniture" checked> Crop marks and caption</label>
           <label><input type="checkbox" id="t-wind" checked> Moving particles</label>
         </div>
       </details>
@@ -210,11 +244,31 @@ th:first-child, td:first-child { text-align: left; }
 // ───────────────────────────── design space ─────────────────────────────
 const D = 1000;              // design units across the plate
 const CX = D / 2, CY = D / 2 - 24, R = 344;
-const PAPER = '#f1ebdd', INK = '#191410';
+let savedTheme;
+try { savedTheme = localStorage.getItem('wind-press-theme'); } catch {}
+const stocks = {
+  light: { paper: '#f1ebdd', ink: '#191410', tracer: '#91352899',
+    level: ['#24386a','#215487','#237788','#427759','#907226','#a25127','#8b3045'],
+    speed: ['#295078','#376d93','#327e82','#777c37','#ab6a19','#ae4725','#93293c'] },
+  dark: { paper: '#101a22', ink: '#f1e7ce', tracer: '#fff2b799',
+    level: ['#8295ec','#69b3f4','#56d7da','#8bd7a1','#edcd75','#ff9d68','#fa7f9c'],
+    speed: ['#7e9ecd','#74bef0','#67d9d0','#bbdc91','#f6c76a','#ff9961','#ff7883'] },
+};
+const inkModes = {
+  level: ['Low ψ', 'High ψ', 'Each line follows one value of ψ. Its ink locates that contour on the scale from low to high.'],
+  speed: ['Slow', 'Fast', 'Each line takes its ink from the wind speed at its starting point, relative to the field’s average.'],
+  mono: ['', '', 'One ink for every contour. Line weight still shows the wind speed at its starting point.'],
+};
+function inkFor(stroke, settings) {
+  const stock = stocks[settings.theme];
+  return settings.mapping === 'mono' ? stock.ink : stock[settings.mapping][stroke[settings.mapping]];
+}
+function inkBand(fraction) { return Math.max(0, Math.min(6, Math.floor(fraction * 7))); }
 const MAX_SEED = 0xffffffff;
 const VIEW_SPAN = 755;
 
 const params = {
+  theme: Object.hasOwn(stocks, savedTheme) ? savedTheme : 'light', mapping: 'mono',
   swirls: 3, swirlLam: 3.4,
   detail: 3, detailLam: 0.75,
   grain: 0.09,
@@ -224,6 +278,8 @@ const params = {
   furniture: true, wind: true,
   depth: 1, loopSeconds: 12,
 };
+
+document.documentElement.dataset.theme = params.theme;
 
 // ───────────────────────────── rng ─────────────────────────────
 function mulberry32(a) {
@@ -270,12 +326,22 @@ function buildField() {
 
   // measure a typical gradient magnitude so stroke weight reads the same
   let acc = 0, n = 0;
+  F.minLevel = Infinity;
+  F.maxLevel = -Infinity;
   for (let i = 0; i < 240; i++) {
     const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R;
-    const [vx, vy] = vel(CX + Math.cos(a) * r, CY + Math.sin(a) * r);
+    const x = CX + Math.cos(a) * r, y = CY + Math.sin(a) * r;
+    const level = fieldLevel(x, y);
+    F.minLevel = Math.min(F.minLevel, level);
+    F.maxLevel = Math.max(F.maxLevel, level);
+    const [vx, vy] = vel(x, y);
     acc += Math.hypot(vx, vy); n++;
   }
   F.speedScale = acc / n || 1;
+}
+
+function fieldLevel(x, y) {
+  return F.terms.reduce((sum, t) => sum + t.a * Math.sin(t.kx * x + t.ky * y + t.p), 0);
 }
 
 function vel(x, y, t = F.terms) {
@@ -371,17 +437,17 @@ function strokePath(stroke, twists = []) {
 
 function execStroke(ctx, stroke, settings, twists) {
   const path = twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke));
-  ctx.strokeStyle = INK;
+  ctx.strokeStyle = inkFor(stroke, settings);
   ctx.globalAlpha = Math.min(1, stroke.a * settings.ink);
   ctx.lineWidth = stroke.w * settings.weight;
   ctx.lineCap = 'round';
   ctx.stroke(path);
 }
 
-function paintPaper(ctx, w, h) {
+function paintPaper(ctx, w, h, settings) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = PAPER;
+  ctx.fillStyle = stocks[settings.theme].paper;
   ctx.fillRect(0, 0, w, h);
 }
 
@@ -396,13 +462,13 @@ function plateState() {
   };
 }
 
-function startPainting(ctx, scale, x = 0, y = 0) {
-  paintPaper(ctx, ctx.canvas.width, ctx.canvas.height);
+function startPainting(ctx, settings, scale, x = 0, y = 0) {
+  paintPaper(ctx, ctx.canvas.width, ctx.canvas.height, settings);
   ctx.setTransform(scale, 0, 0, scale, -x * scale, -y * scale);
 }
 
 function paintPlate(ctx, scale, state, x = 0, y = 0) {
-  startPainting(ctx, scale, x, y);
+  startPainting(ctx, state.settings, scale, x, y);
   for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists);
   ctx.globalAlpha = 1;
   if (state.settings.furniture) drawFurniture(ctx, state);
@@ -414,7 +480,6 @@ function redrawAll() {
 
 // ───────────────────────────── furniture ─────────────────────────────
 const markers = [[34, 34], [D - 34, 34], [34, D - 34], [D - 34, D - 34]];
-const rings = [[R + 9, 0.8], [R + 17, 1.4]];
 
 function caption(state) {
   const { seed } = state.settings;
@@ -430,15 +495,7 @@ function caption(state) {
 
 function drawFurniture(ctx, state) {
   ctx.save();
-  ctx.strokeStyle = INK;
-  ctx.globalAlpha = 0.5;
-  for (const [radius, width] of rings) {
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.arc(CX, CY, radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
+  ctx.strokeStyle = stocks[state.settings.theme].ink;
   ctx.globalAlpha = 0.4;
   ctx.lineWidth = 0.9;
   ctx.beginPath();
@@ -448,7 +505,7 @@ function drawFurniture(ctx, state) {
   }
   ctx.stroke();
 
-  ctx.fillStyle = INK;
+  ctx.fillStyle = stocks[state.settings.theme].ink;
   for (const { text, y, size, track, opacity, family } of caption(state)) {
     ctx.globalAlpha = opacity;
     ctx.font = `400 ${size}px ${family}`;
@@ -523,7 +580,7 @@ function startPlot() {
 
   job = { dsep, seeds, i: 0 };
   syncInstrument();
-  startPainting(pctx, view.dpr * view.scale, view.x, view.y);
+  startPainting(pctx, params, view.dpr * view.scale, view.x, view.y);
   busy.classList.add('on');
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
@@ -574,7 +631,9 @@ function tick() {
     const [vx, vy] = vel(pts[0], pts[1]);
     const sn = Math.min(1, (Math.hypot(vx, vy) / F.speedScale) * 0.9);
     const b = BUCKETS[Math.min(3, Math.floor(sn * 4))];
-    const s = { pts: Float32Array.from(pts), w: b.w, a: b.a };
+    const level = inkBand((fieldLevel(sx, sy) - F.minLevel) / (F.maxLevel - F.minLevel || 1));
+    const speed = inkBand(Math.hypot(vx, vy) / (2 * F.speedScale));
+    const s = { pts: Float32Array.from(pts), w: b.w, a: b.a, level, speed };
     strokes.push(s);
 
     // paint immediately: no full repaint, just the new line
@@ -688,7 +747,7 @@ function drawParticles(dt) {
   const to = [0, 0];
   wctx.globalCompositeOperation = 'source-over';
   wctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
-  wctx.strokeStyle = 'rgba(166, 58, 41, .58)';
+  wctx.strokeStyle = stocks[params.theme].tracer;
   wctx.lineWidth = 1.45;
   wctx.lineCap = 'round';
   wctx.beginPath();
@@ -853,6 +912,7 @@ captureButton.addEventListener('click', () => {
   if (job || plotTimer) return;
   if (captured) {
     captured = null;
+    applyInks();
     lastMotionTime = 0;
     nextEngraving = 0;
     if (playing) requestMotion();
@@ -966,14 +1026,11 @@ function drawThumbnail(canvas, settings) {
   const terms = createTerms(settings);
   const random = mulberry32(settings.seed ^ 0x2698393e);
   const radius = 29;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.scale(2, 2);
   ctx.translate(34, 34);
-  ctx.beginPath();
-  ctx.arc(0, 0, radius + .5, 0, Math.PI * 2);
-  ctx.strokeStyle = '#7e7260';
-  ctx.lineWidth = .55;
-  ctx.stroke();
-  ctx.strokeStyle = '#3b352c';
+  ctx.strokeStyle = stocks[settings.theme].ink;
   ctx.lineWidth = .42;
   ctx.beginPath();
   for (let i = 0; i < 59; i++) {
@@ -1005,9 +1062,46 @@ for (const [index, preset] of presets.entries()) {
   button.append(canvas, preset.name);
   button.addEventListener('click', () => setPattern(preset, index));
   presetGallery.append(button);
-  drawThumbnail(canvas, { ...params, ...preset });
+
 }
 updatePresetButtons();
+
+const themeButton = document.getElementById('theme');
+const inkButtons = document.querySelectorAll('[data-ink]');
+function applyInks() {
+  document.documentElement.dataset.theme = params.theme;
+  themeButton.setAttribute('aria-pressed', String(params.theme === 'dark'));
+  themeButton.textContent = params.theme === 'dark' ? '☾ Dark mode ✓' : '☾ Dark mode';
+  const settings = captured?.settings || params;
+  const stock = stocks[settings.theme];
+  document.getElementById('stage').style.setProperty('--plate-surround', stock.paper);
+  for (const button of inkButtons) button.setAttribute('aria-pressed', String(button.dataset.ink === settings.mapping));
+  const [low, high, description] = inkModes[settings.mapping];
+  document.getElementById('ink-note').textContent = description;
+  document.querySelector('.ink-key').hidden = settings.mapping === 'mono';
+  const labels = document.querySelectorAll('.key-labels span');
+  labels[0].textContent = low;
+  labels[1].textContent = high;
+  document.querySelector('.ramp').replaceChildren(...(stock[settings.mapping] || []).map(color => {
+    const swatch = document.createElement('i');
+    swatch.style.background = color;
+    return swatch;
+  }));
+  for (const [i, canvas] of [...presetGallery.querySelectorAll('canvas')].entries()) {
+    drawThumbnail(canvas, { ...params, ...presets[i] });
+  }
+  clearParticles();
+  redrawAll();
+}
+themeButton.addEventListener('click', () => {
+  params.theme = params.theme === 'dark' ? 'light' : 'dark';
+  try { localStorage.setItem('wind-press-theme', params.theme); } catch {}
+  applyInks();
+});
+for (const button of inkButtons) button.addEventListener('click', () => {
+  params.mapping = button.dataset.ink;
+  applyInks();
+});
 
 const patternKeys = new Set(['swirls', 'swirlLam', 'detail', 'detailLam', 'grain']);
 const sliders = [
@@ -1108,13 +1202,14 @@ function xml(text) {
 
 function buildSVG(state) {
   const { settings, twists, strokes } = state;
+  const stock = stocks[settings.theme];
   const metadata = xml(JSON.stringify({ version: 1, settings, twists }));
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${D}" height="${D}" viewBox="0 0 ${D} ${D}">`,
     '<title>The Wind Press</title>',
     `<metadata>${metadata}</metadata>`,
-    `<rect width="${D}" height="${D}" fill="${PAPER}"/>`,
-    `<g fill="none" stroke="${INK}" stroke-linecap="round">`,
+    `<rect width="${D}" height="${D}" fill="${stock.paper}"/>`,
+    `<g fill="none" stroke="${stock.ink}" stroke-linecap="round">`,
   ];
   const point = [0, 0];
   for (const stroke of strokes) {
@@ -1125,19 +1220,16 @@ function buildSVG(state) {
     }
     const width = (stroke.w * settings.weight).toFixed(3);
     const opacity = Math.min(1, stroke.a * settings.ink).toFixed(3);
-    parts.push(`<path d="${commands.join('')}" stroke-width="${width}" stroke-opacity="${opacity}"/>`);
+    parts.push(`<path d="${commands.join('')}" stroke="${inkFor(stroke, settings)}" stroke-width="${width}" stroke-opacity="${opacity}"/>`);
   }
   parts.push('</g>');
   if (settings.furniture) {
-    parts.push(`<g fill="none" stroke="${INK}">`);
-    for (const [radius, width] of rings) {
-      parts.push(`<circle cx="${CX}" cy="${CY}" r="${radius}" stroke-width="${width}" opacity=".5"/>`);
-    }
+    parts.push(`<g fill="none" stroke="${stock.ink}">`);
     for (const [x, y] of markers) {
       parts.push(`<path d="M${x-9} ${y}h18 M${x} ${y-9}v18" stroke-width=".9" opacity=".4"/>`);
     }
     parts.push('</g>');
-    parts.push(`<g fill="${INK}" text-anchor="middle">`);
+    parts.push(`<g fill="${stock.ink}" text-anchor="middle">`);
     for (const { text, y, size, track, opacity, family } of caption(state)) {
       parts.push(`<text x="${CX}" y="${y}" font-family="${xml(family)}" font-size="${size}" letter-spacing="${track}" opacity="${opacity}">${xml(text)}</text>`);
     }
@@ -1172,6 +1264,7 @@ svgButton.addEventListener('click', () => {
 
 addEventListener('resize', fit);
 fit();
+applyInks();
 resetParticles();
 startPlot();
 
