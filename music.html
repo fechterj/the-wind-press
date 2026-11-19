@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Let nearby sounds shape a wind field through your microphone.">
+<meta name="description" content="Shape a wind field with music from a browser tab, a local audio file, or your microphone.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Wind Press">
 <meta property="og:description" content="Shape a wind field with the sound of a song.">
@@ -154,6 +154,7 @@ th:first-child, td:first-child { text-align: left; }
 }
 .sound-panel { background: var(--hero); }
 #mic { background: var(--ink); color: var(--paper); }
+#drop-hint { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink); background: var(--panel); outline: 2px dashed var(--accent); outline-offset: -8px; font: 26px var(--serif); pointer-events: none; }
 #audio { width: 100%; margin-top: 7px; }
 #levels { display: flex; gap: 10px; font: 11px var(--mono); margin-top: 8px; }
 #levels label { flex: 1; }
@@ -193,15 +194,21 @@ th:first-child, td:first-child { text-align: left; }
            aria-keyshortcuts="Enter" tabindex="0">
         <canvas id="plate" aria-hidden="true"></canvas>
       </div>
+      <div id="drop-hint" hidden>Drop to play</div>
       <div id="busy">Plotting…</div>
     </div>
     <div class="playback">
       <button type="button" id="mic">Start microphone</button>
+      <button type="button" id="tab-input">Listen to a tab</button>
+      <button type="button" id="open-file">Open MP3</button>
+      <input type="file" id="music-file" accept="audio/*,.mp3" hidden>
       <button id="play" type="button" hidden>Pause response</button>
       <p id="mode-note">Play music to move the field.</p>
       <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
     </div>
 
+      <audio id="audio" controls hidden preload="metadata"></audio>
+      <div id="motion-slider" data-editable></div>
       <div class="note-seed" data-editable>
         <label><input type="checkbox" id="note-seeds"> New seed on notes</label>
         <span id="heard-seed"></span>
@@ -218,7 +225,7 @@ th:first-child, td:first-child { text-align: left; }
     <section class="sound-panel">
       <details><summary>Built-in demo · Air in D</summary>
         <button type="button" id="demo">Play Air in D</button>
-        <audio id="audio" controls hidden preload="metadata"></audio>
+
       </details>
     </section>
     <section class="ink-desk" aria-labelledby="ink-title" data-editable>
@@ -252,7 +259,7 @@ th:first-child, td:first-child { text-align: left; }
         </details>
         <details>
           <summary>How the field moves</summary>
-          <p class="formula-explain">Each frequency band moves the lines along the flow from its own group of sine waves. Response scales the movement, which tapers at the edge.</p>
+          <p class="formula-explain">Each frequency band shapes its own group of sine waves. Bass sweeps the broad contours sideways, mids fold the ripples, and highs ruffle the grain. Motion strength scales the movement, which tapers at the edge.</p>
           <div class="motion-equation" id="motion-equation"></div>
         </details>
       </div>
@@ -316,7 +323,7 @@ const params = {
   detail: 3, detailLam: 0.75,
   grain: 0.09,
   spacing: 3.0, weight: 1, ink: 1,
-  seed: 20261117, noteSeeds: false,
+  seed: 20261117, noteSeeds: false, motionModel: 2,
   particles: 900, speed: 1,
   furniture: true, wind: true,
   depth: 1, loopSeconds: 12,
@@ -463,6 +470,8 @@ let stats = { lines: 0, pts: 0 };
 
 // Cache each wave group's velocity (∂ψ/∂y, −∂ψ/∂x) at the original points.
 function waveDirections(stroke) {
+  const crosswise = params.motionModel === 2;
+  const gains = crosswise ? [112, 180, 360] : [34, 52, 86];
   const vectors = new Float32Array(stroke.pts.length * 3);
   const groups = [F.terms.slice(0, params.swirls), F.terms.slice(params.swirls, params.swirls + params.detail),
     F.terms.slice(params.swirls + params.detail)];
@@ -471,9 +480,9 @@ function waveDirections(stroke) {
     const edge = Math.max(0, 1 - ((x - CX) ** 2 + (y - CY) ** 2) / (R * R));
     for (let g = 0; g < 3; g++) {
       const [vx, vy] = vel(x, y, groups[g]);
-      const scale = edge * [34, 52, 86][g] / Math.sqrt(groups[g].length || 1);
-      vectors[i * 3 + 2 * g] = vx * scale;
-      vectors[i * 3 + 2 * g + 1] = vy * scale;
+      const scale = edge * gains[g] / Math.sqrt(groups[g].length || 1);
+      vectors[i * 3 + 2 * g] = (crosswise ? -vy : vx) * scale;
+      vectors[i * 3 + 2 * g + 1] = (crosswise ? vx : vy) * scale;
     }
   }
   return vectors;
@@ -486,6 +495,22 @@ function fieldPoint(stroke, i, twists, mix, point) {
   for (let g = 0; g < 3; g++) {
     point[0] += mix[g] * d[i * 3 + 2 * g];
     point[1] += mix[g] * d[i * 3 + 2 * g + 1];
+  }
+  if (params.motionModel === 2) {
+    // A soft boundary lets strong attacks fold the print without cropping it.
+    const dx = point[0] - CX, dy = point[1] - CY;
+    const radius = Math.hypot(dx, dy);
+    const rim = R * .90;
+    if (radius > rim) {
+      const original = Math.hypot(stroke.pts[i] - CX, stroke.pts[i + 1] - CY);
+      const start = Math.max(rim, original);
+      if (radius > start && start < R) {
+        const room = R - start;
+        const ratio = (start + room * Math.tanh((radius - start) / room)) / radius;
+        point[0] = CX + dx * ratio;
+        point[1] = CY + dy * ratio;
+      }
+    }
   }
 }
 
@@ -774,7 +799,7 @@ let nextEngraving = 0;
 let phase = 0;
 function canMove() {
   return playing && !captured && !sharedPlate && !document.hidden &&
-    analyser && (micStream || (!audio.paused && !audio.hidden));
+    analyser && (inputStream || (!audio.paused && !audio.hidden));
 }
 
 function requestMotion() {
@@ -827,6 +852,10 @@ captureButton.addEventListener('click', () => {
   if (job || plotTimer) return;
   if (captured) {
     captured = null;
+    if (params.motionModel === 1) {
+      params.motionModel = 2;
+      for (const stroke of strokes) delete stroke.directions;
+    }
     applyInks();
     nextEngraving = 0;
     renderPosition();
@@ -887,7 +916,7 @@ function updateMotionEquation() {
   document.getElementById('band-equation').textContent =
     'Δp = ' + mix[0].toFixed(2) + ' B + ' + mix[1].toFixed(2) + ' R + ' + mix[2].toFixed(2) + ' G';
   if (motionDetails.open) document.getElementById('motion-equation').textContent =
-    'B, R, G are the broad, ripple and grain flow vectors at each point, scaled for display.';
+    'B, R, G are the broad, ripple and grain displacements at each point, scaled for display.';
 }
 const motionDetails = document.querySelector('#motion-equation').closest('details');
 motionDetails.addEventListener('toggle', updateMotionEquation);
@@ -1014,7 +1043,7 @@ const patternKeys = new Set(['swirls', 'swirlLam', 'detail', 'detailLam', 'grain
 const sliders = [
   ['field-sliders', 'swirlLam', 'Wave size', .6, 5, .1, v => v.toFixed(1) + ' × radius', 'plot'],
   ['field-sliders', 'detail', 'Ripple waves', 0, 6, 1, v => String(v), 'plot'],
-  ['field-sliders', 'depth', 'Response', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
+  ['motion-slider', 'depth', 'Motion strength', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
   ['advanced-sliders', 'swirls', 'Broad waves', 1, 6, 1, v => String(v), 'plot'],
   ['advanced-sliders', 'detailLam', 'Ripple size', .2, 1.6, .05, v => v.toFixed(2) + ' × radius', 'plot'],
   ['advanced-sliders', 'grain', 'Grain strength', 0, .4, .005, v => Math.round(v * 100) + '%', 'plot'],
@@ -1044,6 +1073,7 @@ function readSharedPlate() {
   const settings = plate?.settings;
   if (plate?.version !== 1 || !settings ||
       !Object.hasOwn(stocks, settings.theme) || !Object.hasOwn(inkModes, settings.mapping) ||
+      (settings.motionModel !== undefined && ![1, 2].includes(settings.motionModel)) ||
       (settings.noteSeeds !== undefined && typeof settings.noteSeeds !== 'boolean') ||
       !Number.isInteger(settings.seed) || !inRange(settings.seed, 1, MAX_SEED) ||
       typeof settings.furniture !== 'boolean' || typeof settings.wind !== 'boolean' ||
@@ -1060,6 +1090,7 @@ function readSharedPlate() {
 let sharedPlate = readSharedPlate();
 if (sharedPlate) {
   for (const key of Object.keys(params)) params[key] = sharedPlate.settings[key] ?? params[key];
+  params.motionModel = sharedPlate.settings.motionModel ?? 1;
   selectedPreset = presets.findIndex(({ name, ...settings }) =>
     Object.keys(settings).every(key => settings[key] === params[key]));
   updatePresetButtons();
@@ -1250,8 +1281,8 @@ const lowMeter = document.getElementById('low');
 const midMeter = document.getElementById('mid');
 const mic = document.getElementById('mic');
 const highMeter = document.getElementById('high');
-let audioContext, analyser, spectrum, demoURL, demoBlob;
-let bass = 0, mids = 0, treble = 0, micStream = null, micSource, mediaSource, waveform;
+let audioContext, analyser, spectrum, audioURL, demoBlob;
+let bass = 0, mids = 0, treble = 0, inputStream = null, streamSource, mediaSource, waveform;
 let sourceVersion = 0;
 let previousSpectrum, lastAttack = -Infinity;
 let wasQuiet = true, fluxFloor = 0;
@@ -1289,19 +1320,26 @@ function detectAttack(time) {
 }
 
 
+const tabButton = document.getElementById('tab-input');
+const fileInput = document.getElementById('music-file');
+const dropHint = document.getElementById('drop-hint');
+const tabSupported = Boolean(navigator.mediaDevices?.getDisplayMedia);
+tabButton.hidden = !tabSupported;
+let activeButton = null;
 const micSupported = Boolean(navigator.mediaDevices?.getUserMedia);
 mic.disabled = !micSupported;
 
 function showSignal() {
-  const connected = Boolean(micStream || (analyser && demoURL));
+  const connected = Boolean(inputStream || (analyser && audioURL));
   playButton.hidden = !connected || Boolean(captured);
   const detected = Math.max(lowMeter.value, midMeter.value, highMeter.value) > .01;
-  let message = micSupported ? 'Tap Start microphone, then play music nearby.' : 'Microphone unavailable in this browser. Try the built-in demo.';
+  let message = tabSupported ? 'Drop an MP3 here, listen to a playing tab, or use the microphone.' :
+    'Drop or open an MP3, or use the microphone for nearby music.';
   if (captured) message = 'Frozen frame · Back to editing resumes the response.';
   else if (connected && !playing) message = 'Motion paused · Choose Enable response.';
-  else if (connected && !micStream && audio.paused) message = 'Audio paused · Press play in the player.';
+  else if (connected && !inputStream && audio.paused) message = 'Audio paused · Press play in the player.';
   else if (connected && audioContext?.state === 'suspended') message = 'Audio input suspended · Tap Enable audio.';
-  else if (connected && params.depth === 0) message = 'Response is at zero · Raise it under Mix the field.';
+  else if (connected && params.depth === 0) message = 'Raise Motion strength to move the field.';
   else if (connected) message = detected ? 'Receiving music · Following the frequency bands' : 'Listening · Waiting for an audio signal';
   if (note.textContent !== message) note.textContent = message;
 }
@@ -1322,7 +1360,7 @@ function sampleSound() {
   analyser.getFloatTimeDomainData(waveform);
   let energy = 0;
   for (const value of waveform) energy += value * value;
-  if (energy / waveform.length < 0.000004 || (!micStream && (audio.muted || !audio.volume))) {
+  if (energy / waveform.length < 0.000004 || (!inputStream && (audio.muted || !audio.volume))) {
     bass = mids = treble = 0;
   } else {
     analyser.getFloatFrequencyData(spectrum);
@@ -1345,12 +1383,14 @@ function sampleSound() {
 
 function stopListening() {
   resetAttacks();
-  mic.removeAttribute('aria-busy');
+  activeButton?.removeAttribute('aria-busy');
+  activeButton = null;
+  tabButton.textContent = 'Listen to a tab';
   sourceVersion++;
-  micSource?.disconnect();
-  micSource = null;
-  if (micStream) for (const track of micStream.getTracks()) track.stop();
-  micStream = null;
+  streamSource?.disconnect();
+  streamSource = null;
+  if (inputStream) for (const track of inputStream.getTracks()) track.stop();
+  inputStream = null;
   mic.disabled = !micSupported;
   lowMeter.value = midMeter.value = highMeter.value = 0;
   mic.textContent = 'Start microphone';
@@ -1362,64 +1402,79 @@ function clearSound() {
   audio.pause();
   audio.removeAttribute('src');
   audio.load();
-  if (demoURL) URL.revokeObjectURL(demoURL);
-  demoURL = null;
+  if (audioURL) URL.revokeObjectURL(audioURL);
+  audioURL = null;
   audio.hidden = true;
   stopListening();
   renderPosition();
 }
-mic.addEventListener('click', async () => {
-  if (micStream || mic.getAttribute('aria-busy') === 'true') {
+async function connectLive(button) {
+  const isTab = button === tabButton;
+  const label = isTab ? 'Tab audio' : 'Microphone';
+  if (button === activeButton) {
     clearSound();
-    soundStatus.textContent = 'Microphone off.';
+    soundStatus.textContent = label + ' off.';
     return;
   }
   clearSound();
   const version = sourceVersion;
   let stream;
-  mic.setAttribute('aria-busy', 'true');
-  mic.textContent = 'Cancel';
-  soundStatus.textContent = 'Allow microphone access in your browser.';
+  activeButton = button;
+  button.setAttribute('aria-busy', 'true');
+  button.textContent = 'Cancel';
+  soundStatus.textContent = isTab ? 'Choose the tab playing music and enable Share tab audio.' :
+    'Allow microphone access in your browser.';
   try {
     initAnalysis();
     const resume = audioContext.resume().catch(() => {});
-    stream = await navigator.mediaDevices.getUserMedia({ audio: {
+    stream = isTab ? await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: 'browser' }, audio: { suppressLocalAudioPlayback: false },
+      selfBrowserSurface: 'exclude', systemAudio: 'exclude'
+    }) : await navigator.mediaDevices.getUserMedia({ audio: {
       echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
     if (version !== sourceVersion) return;
     await resume;
     if (version !== sourceVersion) return;
-    micSource = audioContext.createMediaStreamSource(stream);
-    micSource.connect(analyser);
-    micStream = stream;
-    for (const input of stream.getTracks()) input.addEventListener('ended', () => {
-      if (micStream !== stream) return;
+    const surface = stream.getVideoTracks()[0]?.getSettings().displaySurface;
+    if (!stream.getAudioTracks().length || (isTab && surface && surface !== 'browser')) {
       stopListening();
-      soundStatus.textContent = 'Microphone disconnected.';
+      soundStatus.textContent = 'Choose a browser tab with Share tab audio enabled, or open an MP3.';
+      return;
+    }
+    streamSource = audioContext.createMediaStreamSource(stream);
+    streamSource.connect(analyser);
+    inputStream = stream;
+    for (const track of stream.getTracks()) track.addEventListener('ended', () => {
+      if (inputStream !== stream) return;
+      clearSound();
+      soundStatus.textContent = label + ' disconnected.';
     });
     if (captured) captureButton.click();
-    mic.textContent = 'Stop microphone';
+    button.textContent = isTab ? 'Stop tab audio' : 'Stop microphone';
     syncInstrument();
-    soundStatus.textContent = 'Microphone on · Sound is processed on this device.';
+    soundStatus.textContent = isTab ? 'Listening to the selected tab.' : 'Microphone on · Sound is processed on this device.';
     requestMotion();
   } catch (error) {
     if (version === sourceVersion) {
       stopListening();
-      soundStatus.textContent = error.name === 'NotAllowedError' ?
-        'Microphone access is blocked. Allow it in your browser’s site settings, then tap Start microphone.' :
-        'Could not open the microphone. Check that an input device is connected, then try again.';
+      soundStatus.textContent = isTab ? 'Tab audio was not connected. Try again or drop an MP3.' :
+        error.name === 'NotAllowedError' ? 'Allow microphone access in site settings, then try again.' :
+        'Could not open the microphone. Check the input device and try again.';
     }
   } finally {
-    if (stream && micStream !== stream) for (const track of stream.getTracks()) track.stop();
-    if (version === sourceVersion) mic.removeAttribute('aria-busy');
+    if (stream && inputStream !== stream) for (const track of stream.getTracks()) track.stop();
+    if (version === sourceVersion) button.removeAttribute('aria-busy');
   }
-});
+}
+mic.addEventListener('click', () => connectLive(mic));
+tabButton.addEventListener('click', () => connectLive(tabButton));
 addEventListener('pagehide', stopListening);
 
-function playDemo() {
+function playAudio(blob, title, loop) {
   clearSound();
-  demoURL = URL.createObjectURL(demoBlob ??= makeLoop());
-  audio.src = demoURL;
-  audio.loop = true;
+  audioURL = URL.createObjectURL(blob);
+  audio.src = audioURL;
+  audio.loop = loop;
   audio.hidden = false;
   if (captured) captureButton.click();
   try {
@@ -1431,14 +1486,14 @@ function playDemo() {
     }
     audioContext.resume().catch(() => {});
     document.getElementById('levels').hidden = false;
-    soundStatus.textContent = 'Air in D · Built-in demo.';
+    soundStatus.textContent = title;
   } catch {
     soundStatus.textContent = 'This browser supports playback only.';
   }
   showSignal();
-  const source = demoURL;
+  const source = audioURL;
   audio.play().catch(() => {
-    if (demoURL === source) soundStatus.textContent = audio.error ? 'The demo could not play in this browser.' : 'Press Play in the audio player.';
+    if (audioURL === source) soundStatus.textContent = audio.error ? 'This audio could not be decoded. Try another MP3.' : 'Press Play in the audio player.';
   });
 }
 audio.addEventListener('play', () => {
@@ -1447,12 +1502,12 @@ audio.addEventListener('play', () => {
   requestMotion();
 });
 audio.addEventListener('pause', () => {
-  if (!audio.paused || micStream) return;
+  if (!audio.paused || inputStream) return;
   lowMeter.value = midMeter.value = highMeter.value = 0;
   showSignal();
 });
 audio.addEventListener('error', () => {
-  if (demoURL) soundStatus.textContent = 'The demo could not play in this browser.';
+  if (audioURL) soundStatus.textContent = 'This audio could not be decoded. Try another MP3.';
 });
 // Air in D: eight bars with a descending ground, a ii–V cadence and a final tonic.
 const score = [
@@ -1507,7 +1562,35 @@ function makeLoop() {
   }
   return new Blob([wav], { type: 'audio/wav' });
 }
-document.getElementById('demo').addEventListener('click', playDemo);
+document.getElementById('demo').addEventListener('click', () => playAudio(demoBlob ??= makeLoop(), 'Air in D · Built-in demo', true));
+document.getElementById('open-file').addEventListener('click', () => fileInput.click());
+function openTrack(file) {
+  if (!file) return;
+  if (!file.type.startsWith('audio/') && !/\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(file.name)) {
+    soundStatus.textContent = 'Choose an MP3 or another audio file.';
+    return;
+  }
+  playAudio(file, file.name, false);
+}
+fileInput.addEventListener('change', () => {
+  openTrack(fileInput.files[0]);
+  fileInput.value = '';
+});
+let dragDepth = 0;
+for (const type of ['dragenter', 'dragleave', 'dragover', 'drop']) {
+  window.addEventListener(type, event => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    if (type === 'dragenter') dragDepth++;
+    if (type === 'dragleave') dragDepth = Math.max(0, dragDepth - 1);
+    if (type === 'dragover') event.dataTransfer.dropEffect = 'copy';
+    if (type === 'drop') {
+      dragDepth = 0;
+      openTrack(event.dataTransfer.files[0]);
+    }
+    dropHint.hidden = !dragDepth;
+  });
+}
 
 addEventListener('resize', fit);
 fit();
