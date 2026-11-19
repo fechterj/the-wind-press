@@ -162,7 +162,8 @@ th:first-child, td:first-child { text-align: left; }
 .file-label:focus-within { outline: 2px solid var(--accent); }
 #embed iframe, #audio { display: block; width: 100%; margin: 7px 0; border: 0; border-radius: 6px; }
 #levels { font: 11px var(--mono); margin-top: 8px; }
-#levels meter { width: 4em; accent-color: var(--accent); }
+#levels label { flex: 1; }
+#levels meter { display: block; width: 100%; accent-color: var(--accent); }
 #song-status { margin-top: 8px; color: var(--muted); font-size: 12px; }
 #song-page { color: var(--accent); }
 </style>
@@ -198,25 +199,31 @@ th:first-child, td:first-child { text-align: left; }
       <div id="busy">Plotting…</div>
     </div>
     <div class="playback">
-      <button id="play" type="button">Pause</button>
+      <button type="button" id="demo">Play Air in D</button>
+      <label class="file-label">Open audio<input id="song-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac"></label>
+      <button id="play" type="button" hidden>Pause response</button>
       <p id="mode-note">Play music to move the field.</p>
       <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
     </div>
 
+      <div id="levels" aria-label="Audio frequency levels">
+        <label>Bass → Broad<meter id="low" max="1"></meter></label>
+        <label>Mids → Ripple<meter id="mid" max="1"></meter></label>
+        <label>Highs → Grain<meter id="high" max="1"></meter></label>
+      </div>
+
   </div>
   <aside class="editor" aria-label="Pattern editor">
     <section class="sound-panel">
-      <div class="section-head"><h2>Soundtrack</h2><button type="button" id="demo">Try the loop</button></div>
-      <form id="song-form"><label for="song-link">Spotify track or YouTube video</label>
-        <div class="song-row"><input id="song-link" type="text" inputmode="url" autocomplete="off" placeholder="Paste a song link"><button>Load</button></div>
+      <div class="section-head"><h2>Music input</h2><button type="button" id="clear-song" hidden>Clear</button></div>
+      <form id="song-form"><label for="song-link">Spotify or YouTube link</label>
+        <div class="song-row"><input id="song-link" type="text" inputmode="url" autocomplete="off" placeholder="Paste a track or video"><button id="load-song">Load player</button></div>
       </form>
-      <div class="file-row"><label class="file-label">Open audio file<input id="song-file" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.aac"></label>
-        <button type="button" id="clear-song" hidden>Clear</button></div>
+      <button type="button" id="mic" hidden>Use microphone</button>
       <div id="embed"></div>
       <audio id="audio" controls hidden preload="metadata"></audio>
-      <div id="levels" hidden><span>Bass <meter id="low" max="1"></meter></span><span>Treble <meter id="high" max="1"></meter></span></div>
       <div id="tempo-row" hidden><button type="button" id="listen" hidden>Use tab audio</button> <a id="song-page" target="_blank" rel="noopener">Open song ↗</a></div>
-      <p id="song-status" role="status">Try the original loop to hear bass bend the broad contours and high notes stir the smaller swirl.</p>
+      <p id="song-status" role="status">Air in D layers cello, inner strings, and a plucked melody. Use the microphone for music playing in the room.</p>
     </section>
     <section class="ink-desk" aria-labelledby="ink-title" data-editable>
       <h2 id="ink-title">Field ink</h2>
@@ -234,6 +241,7 @@ th:first-child, td:first-child { text-align: left; }
         <div class="eq" id="field-equation">
           ψ(x,y) = Σ A<sub>k</sub> sin(k<sub>x</sub>x + k<sub>y</sub>y + φ<sub>k</sub>)
         </div>
+        <div id="band-equation" class="motion-equation"></div>
         <code id="first-term"></code>
         <p id="mix-summary"></p>
         <details id="wave-details">
@@ -248,7 +256,7 @@ th:first-child, td:first-child { text-align: left; }
         </details>
         <details>
           <summary>How the field moves</summary>
-          <p class="formula-explain">Bass bends the broad contours. Treble bends the smaller swirl in the opposite direction. Response controls the strength of both bends.</p>
+          <p class="formula-explain">Each frequency band moves the lines along the flow from its own group of sine waves. Response scales the movement, which tapers at the edge.</p>
           <div class="motion-equation" id="motion-equation"></div>
         </details>
       </div>
@@ -457,20 +465,48 @@ function fit() {
 let strokes = [];
 let stats = { lines: 0, pts: 0 };
 
-function strokePath(stroke, twists = []) {
+// Cache each wave group's velocity (∂ψ/∂y, −∂ψ/∂x) at the original points.
+function waveDirections(stroke) {
+  const vectors = new Float32Array(stroke.pts.length * 3);
+  const groups = [F.terms.slice(0, params.swirls), F.terms.slice(params.swirls, params.swirls + params.detail),
+    F.terms.slice(params.swirls + params.detail)];
+  for (let i = 0; i < stroke.pts.length; i += 2) {
+    const x = stroke.pts[i], y = stroke.pts[i + 1];
+    const edge = Math.max(0, 1 - ((x - CX) ** 2 + (y - CY) ** 2) / (R * R));
+    for (let g = 0; g < 3; g++) {
+      const [vx, vy] = vel(x, y, groups[g]);
+      const scale = edge * [34, 52, 86][g] / Math.sqrt(groups[g].length || 1);
+      vectors[i * 3 + 2 * g] = vx * scale;
+      vectors[i * 3 + 2 * g + 1] = vy * scale;
+    }
+  }
+  return vectors;
+}
+
+function fieldPoint(stroke, i, twists, mix, point) {
+  deform(stroke.pts[i], stroke.pts[i + 1], twists, point);
+  if (!mix) return;
+  const d = stroke.directions ??= waveDirections(stroke);
+  for (let g = 0; g < 3; g++) {
+    point[0] += mix[g] * d[i * 3 + 2 * g];
+    point[1] += mix[g] * d[i * 3 + 2 * g + 1];
+  }
+}
+
+function strokePath(stroke, twists = [], mix = null) {
   const path = new Path2D();
   const points = stroke.pts;
   const point = [0, 0];
   for (let i = 0; i < points.length; i += 2) {
-    deform(points[i], points[i + 1], twists, point);
+    fieldPoint(stroke, i, twists, mix, point);
     if (i === 0) path.moveTo(point[0], point[1]);
     else path.lineTo(point[0], point[1]);
   }
   return path;
 }
 
-function execStroke(ctx, stroke, settings, twists) {
-  const path = twists.length ? strokePath(stroke, twists) : (stroke.p ??= strokePath(stroke));
+function execStroke(ctx, stroke, settings, twists, mix) {
+  const path = (mix || twists.length) ? strokePath(stroke, twists, mix) : (stroke.p ??= strokePath(stroke));
   ctx.strokeStyle = inkFor(stroke, settings);
   ctx.globalAlpha = Math.min(1, stroke.a * settings.ink);
   ctx.lineWidth = stroke.w * settings.weight;
@@ -493,6 +529,7 @@ function plateState() {
     harmonicCount: F.terms.length,
     strokes,
     twists: renderedTwists,
+    mix: renderedMix,
     phase,
   };
 }
@@ -504,7 +541,7 @@ function startPainting(ctx, settings, scale, x = 0, y = 0) {
 
 function paintPlate(ctx, scale, state, x = 0, y = 0) {
   startPainting(ctx, state.settings, scale, x, y);
-  for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists);
+  for (const stroke of state.strokes) execStroke(ctx, stroke, state.settings, state.twists, state.mix);
   ctx.globalAlpha = 1;
   if (state.settings.furniture) drawFurniture(ctx, state);
 }
@@ -690,9 +727,11 @@ function tick() {
     if (sharedPlate) {
       phase = sharedPlate.phase;
       renderedTwists = sharedPlate.twists;
+      renderedMix = sharedPlate.mix ?? null;
       captured = plateState();
       sharedPlate = null;
       redrawAll();
+      updateMotionEquation();
     } else {
       renderPosition();
     }
@@ -731,21 +770,10 @@ const shareButton = document.getElementById('share');
 let playing = !reducedMotion.matches;
 let captured = null;
 let renderedTwists = [];
+let renderedMix = null;
 let motionFrame = 0;
 let nextEngraving = 0;
 let phase = 0;
-function twist(x, y, radius, strength) {
-  return { x, y, inverseRadiusSquared: 1 / (radius * radius), strength };
-}
-
-function currentTwists() {
-  if (!params.depth || (!bass && !treble)) return [];
-  return [
-    twist(CX - 65, CY - 22, R - 69, bass * .87 * params.depth),
-    twist(CX + 94, CY + 50, R - 108, -treble * 1.15 * params.depth),
-  ];
-}
-
 function canMove() {
   return playing && !captured && !job && !plotTimer && !document.hidden &&
     analyser && (tabStream || (!audio.paused && !audio.hidden));
@@ -759,9 +787,10 @@ function animate(time) {
   motionFrame = 0;
   if (!canMove()) return;
   if (time >= nextEngraving) {
-    const previousBass = bass, previousTreble = treble;
+    const previousBass = bass, previousMid = mids, previousTreble = treble;
     sampleSound();
-    if (bass !== previousBass || treble !== previousTreble) renderPosition();
+    showSignal();
+    if (bass !== previousBass || mids !== previousMid || treble !== previousTreble) renderPosition();
     nextEngraving = time + 32;
   }
   requestMotion();
@@ -770,10 +799,8 @@ function animate(time) {
 function syncInstrument() {
   const plotting = Boolean(job || plotTimer);
   frame.toggleAttribute('data-frozen', Boolean(captured));
-  note.textContent = captured
-    ? 'Plate captured. Share it or download a print.'
-    : 'Play music to move the field.';
-  playButton.textContent = playing ? 'Pause response' : 'Enable response';
+  showSignal();
+  playButton.textContent = audioContext?.state === 'suspended' ? 'Enable audio' : playing ? 'Pause response' : 'Enable response';
   playButton.setAttribute('aria-label', playButton.textContent);
   playButton.disabled = Boolean(captured);
   captureButton.textContent = captured ? 'Back to editing' : 'Capture plate';
@@ -857,17 +884,19 @@ function refreshFormula() {
 }
 
 function updateMotionEquation() {
-  if (!motionDetails.open) return;
-  document.getElementById('motion-equation').textContent =
-    'Broad bend = ' + (.87 * params.depth).toFixed(2) + ' × bass · Small bend = −' +
-    (1.15 * params.depth).toFixed(2) + ' × treble';
+  const mix = (captured?.mix || renderedMix) ?? [0, 0, 0];
+  document.getElementById('band-equation').textContent =
+    'Δp = ' + mix[0].toFixed(2) + ' B + ' + mix[1].toFixed(2) + ' R + ' + mix[2].toFixed(2) + ' G';
+  if (motionDetails.open) document.getElementById('motion-equation').textContent =
+    'B, R, G are the broad, ripple and grain flow vectors at each point, scaled for display.';
 }
 const motionDetails = document.querySelector('#motion-equation').closest('details');
 motionDetails.addEventListener('toggle', updateMotionEquation);
 
 function renderPosition() {
   if (job || captured) return;
-  renderedTwists = currentTwists();
+  renderedTwists = [];
+  renderedMix = params.depth && (bass || mids || treble) ? [bass, mids, treble].map(v => v * params.depth) : null;
   redrawAll();
   updateMotionEquation();
 }
@@ -1010,6 +1039,8 @@ function readSharedPlate() {
   } catch {
     return null;
   }
+  if (plate?.mix != null && (!Array.isArray(plate.mix) || plate.mix.length !== 3 ||
+      !plate.mix.every(v => inRange(v, 0, 1.7)))) return null;
   const settings = plate?.settings;
   if (plate?.version !== 1 || !settings ||
       !Object.hasOwn(stocks, settings.theme) || !Object.hasOwn(inkModes, settings.mapping) ||
@@ -1097,8 +1128,10 @@ furnitureOption.addEventListener('change', event => {
   params.furniture = event.target.checked;
   redrawAll();
 });
-playButton.addEventListener('click', () => {
-  playing = !playing;
+playButton.addEventListener('click', async () => {
+  if (audioContext?.state === 'suspended') {
+    try { await audioContext.resume(); } catch { soundStatus.textContent = 'Audio could not start. Press play in the audio player.'; }
+  } else playing = !playing;
   syncInstrument();
   if (playing) requestMotion();
 });
@@ -1107,8 +1140,8 @@ const shareDialog = document.getElementById('share-dialog');
 const shareInput = document.getElementById('share-url');
 const copyStatus = document.getElementById('copy-status');
 shareButton.addEventListener('click', () => {
-  const { settings, twists, phase } = captured || plateState();
-  const data = btoa(JSON.stringify({ version: 1, settings, twists, phase }))
+  const { settings, twists, phase, mix } = captured || plateState();
+  const data = btoa(JSON.stringify({ version: 1, settings, twists, phase, mix }))
     .replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
   const link = new URL(location.href);
   link.hash = 'plate=' + data;
@@ -1135,7 +1168,7 @@ function xml(text) {
 function buildSVG(state) {
   const { settings, twists, strokes } = state;
   const stock = stocks[settings.theme];
-  const metadata = xml(JSON.stringify({ version: 1, settings, twists }));
+  const metadata = xml(JSON.stringify({ version: 1, settings, twists, mix: state.mix }));
   const parts = [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${D}" height="${D}" viewBox="0 0 ${D} ${D}">`,
     '<title>The Wind Press</title>',
@@ -1147,7 +1180,7 @@ function buildSVG(state) {
   for (const stroke of strokes) {
     const commands = [];
     for (let i = 0; i < stroke.pts.length; i += 2) {
-      deform(stroke.pts[i], stroke.pts[i + 1], twists, point);
+      fieldPoint(stroke, i, twists, state.mix, point);
       commands.push(`${i ? 'L' : 'M'}${point[0].toFixed(3)} ${point[1].toFixed(3)}`);
     }
     const width = (stroke.w * settings.weight).toFixed(3);
@@ -1202,19 +1235,42 @@ const embed = document.getElementById('embed');
 const tempoRow = document.getElementById('tempo-row');
 const listen = document.getElementById('listen');
 const lowMeter = document.getElementById('low');
+const midMeter = document.getElementById('mid');
+const mic = document.getElementById('mic');
 const highMeter = document.getElementById('high');
 const clearSong = document.getElementById('clear-song');
 let audioContext, analyser, spectrum, fileURL, demoBlob;
-let bass = 0, treble = 0, tabStream = null, tabSource, mediaSource, waveform;
+let bass = 0, mids = 0, treble = 0, tabStream = null, tabSource, mediaSource, waveform;
 let sourceVersion = 0;
+
+let inputKind = '';
+mic.hidden = !navigator.mediaDevices?.getUserMedia;
+const supportsTabAudio = Boolean(navigator.mediaDevices?.getDisplayMedia);
+document.getElementById('load-song').textContent = supportsTabAudio ? 'Load & connect' : 'Load player';
+
+function showSignal() {
+  const connected = Boolean(tabStream || (analyser && fileURL));
+  playButton.hidden = !connected || Boolean(captured);
+  const detected = Math.max(lowMeter.value, midMeter.value, highMeter.value) > .01;
+  let message = 'Play Air in D or open a song file.';
+  if (captured) message = 'Frozen frame · Back to editing resumes the response.';
+  else if (connected && !playing) message = 'Motion paused · Choose Enable response.';
+  else if (connected && !tabStream && audio.paused) message = 'Audio paused · Press play in the player.';
+  else if (connected && audioContext?.state === 'suspended') message = 'Audio input suspended · Tap Enable audio.';
+  else if (connected && params.depth === 0) message = 'Response is at zero · Raise it under Mix the field.';
+  else if (connected) message = detected ? 'Receiving music · Following the frequency bands' : 'Listening · Waiting for an audio signal';
+  else if (embed.firstChild) message = 'Player only · Connect tab audio or use the microphone.';
+  if (note.textContent !== message) note.textContent = message;
+}
 
 function initAnalysis() {
   if (analyser) return;
   audioContext = new AudioContext();
+  audioContext.addEventListener('statechange', () => { syncInstrument(); requestMotion(); });
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 2048;
   analyser.smoothingTimeConstant = .40;
-  spectrum = new Uint8Array(analyser.frequencyBinCount);
+  spectrum = new Float32Array(analyser.frequencyBinCount);
   waveform = new Float32Array(analyser.fftSize);
 }
 
@@ -1223,21 +1279,23 @@ function sampleSound() {
   let energy = 0;
   for (const value of waveform) energy += value * value;
   if (energy / waveform.length < 0.000004 || (!tabStream && (audio.muted || !audio.volume))) {
-    bass = treble = 0;
+    bass = mids = treble = 0;
   } else {
-    analyser.getByteFrequencyData(spectrum);
+    analyser.getFloatFrequencyData(spectrum);
     const band = (lowHz, highHz) => {
       const binHz = audioContext.sampleRate / analyser.fftSize;
       const first = Math.max(1, Math.ceil(lowHz / binHz));
       const end = Math.min(spectrum.length, Math.ceil(highHz / binHz));
       let sum = 0;
-      for (let i = first; i < end; i++) sum += spectrum[i] ** 2;
-      return Math.min(1, Math.sqrt(sum / Math.max(1, end - first)) / 200);
+      for (let i = first; i < end; i++) sum += 10 ** (spectrum[i] / 10);
+      return Math.max(0, Math.min(1, (10 * Math.log10(sum || 1e-12) + 58) / 54));
     };
-    bass = band(35, 190);
-    treble = band(1400, 6500);
+    bass = band(35, 250);
+    mids = band(250, 2200);
+    treble = band(2200, 12000);
   }
   lowMeter.value = bass;
+  midMeter.value = mids;
   highMeter.value = treble;
 }
 
@@ -1247,10 +1305,14 @@ function stopListening() {
   tabSource = null;
   if (tabStream) for (const track of tabStream.getTracks()) track.stop();
   tabStream = null;
+  inputKind = '';
+  mic.disabled = false;
   listen.disabled = false;
   listen.textContent = 'Use tab audio';
-  lowMeter.value = highMeter.value = 0;
-  document.getElementById('levels').hidden = true;
+  lowMeter.value = midMeter.value = highMeter.value = 0;
+  mic.textContent = 'Use microphone';
+  bass = mids = treble = 0;
+  showSignal();
 }
 
 function clearSound() {
@@ -1260,11 +1322,12 @@ function clearSound() {
   if (fileURL) URL.revokeObjectURL(fileURL);
   fileURL = null;
   embed.replaceChildren();
-  audio.hidden = tempoRow.hidden = clearSong.hidden = document.getElementById('levels').hidden = true;
+  audio.hidden = tempoRow.hidden = clearSong.hidden = true;
   stopListening();
-  bass = treble = 0;
+  bass = mids = treble = 0;
   renderPosition();
   songFile.value = '';
+  showSignal();
 }
 clearSong.addEventListener('click', () => {
   clearSound();
@@ -1308,52 +1371,70 @@ document.getElementById('song-form').addEventListener('submit', event => {
   embed.append(iframe);
   tempoRow.hidden = clearSong.hidden = false;
   document.getElementById('song-page').href = player.link;
-  listen.hidden = !navigator.mediaDevices?.getDisplayMedia;
-  soundStatus.textContent = listen.hidden ? 'Play the song here. For sound-driven motion on this device, open an audio file or try the loop.' :
-    'For sound-driven motion, choose Use tab audio, select this tab, and include its audio.';
+  listen.hidden = !supportsTabAudio;
+  showSignal();
+  if (supportsTabAudio) connectInput('tab');
+  else soundStatus.textContent = 'Press play in the player. Use microphone for music audible in the room, or open an audio file for a direct connection.';
 });
 
-listen.addEventListener('click', async () => {
-  if (tabStream) {
+async function connectInput(kind) {
+  if (tabStream && inputKind === kind) {
     stopListening();
-    soundStatus.textContent = 'Tab audio disconnected.';
+    soundStatus.textContent = 'Audio input disconnected.';
     return;
   }
+  if (!audio.hidden) clearSound();
+  else stopListening();
   const version = sourceVersion;
   let stream;
-  listen.disabled = true;
+  mic.disabled = listen.disabled = true;
+  soundStatus.textContent = kind === 'tab' ? 'Select this tab and enable Share tab audio in the browser picker.' :
+    'Allow microphone access, then play music through speakers. Headphones keep the song out of the microphone.';
   try {
     initAnalysis();
-    const resume = audioContext.resume();
-    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' },
-      audio: { suppressLocalAudioPlayback: false }, preferCurrentTab: true, selfBrowserSurface: 'include' });
+    const resume = audioContext.resume().catch(() => {});
+    stream = kind === 'mic' ? await navigator.mediaDevices.getUserMedia({ audio: {
+      echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false }) :
+      await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' },
+        audio: { suppressLocalAudioPlayback: false }, preferCurrentTab: true, selfBrowserSurface: 'include' });
     await resume;
     if (version !== sourceVersion) return;
     const track = stream.getAudioTracks()[0];
-    if (!track || stream.getVideoTracks()[0]?.getSettings().displaySurface !== 'browser') {
-      soundStatus.textContent = 'Select this browser tab and enable tab audio, or open an audio file.';
+    const surface = stream.getVideoTracks()[0]?.getSettings().displaySurface;
+    if (!track || (kind === 'tab' && surface && surface !== 'browser')) {
+      soundStatus.textContent = 'Choose a browser tab and enable Share tab audio, or use Open audio.';
       return;
     }
+    inputKind = kind;
     tabSource = audioContext.createMediaStreamSource(stream);
     tabSource.connect(analyser);
     tabStream = stream;
-    for (const video of stream.getVideoTracks()) video.stop();
-    track.addEventListener('ended', () => {
+    for (const input of stream.getTracks()) input.addEventListener('ended', () => {
       if (tabStream !== stream) return;
       stopListening();
-      soundStatus.textContent = 'Tab audio disconnected.';
+      soundStatus.textContent = 'Audio input disconnected.';
     });
-    listen.textContent = 'Disconnect audio';
+    if (captured) captureButton.click();
+    if (kind === 'mic') mic.textContent = 'Stop microphone';
+    else listen.textContent = 'Disconnect tab';
+    clearSong.hidden = false;
+    syncInstrument();
     document.getElementById('levels').hidden = false;
-    soundStatus.textContent = 'The field follows audio from the selected tab.';
+    soundStatus.textContent = kind === 'mic' ? 'Microphone connected · Play music through speakers.' :
+      'Tab connected · Press play in the song player.';
     requestMotion();
   } catch {
-    if (version === sourceVersion) soundStatus.textContent = 'Tab audio unavailable. Try again or open an audio file.';
+    if (version === sourceVersion) soundStatus.textContent = kind === 'mic' ?
+      'Microphone unavailable. Allow access or choose Open audio.' :
+      'Tab audio was not connected. Retry Use tab audio, use the microphone with speakers, or choose Open audio.';
   } finally {
     if (stream && tabStream !== stream) for (const track of stream.getTracks()) track.stop();
-    if (version === sourceVersion) listen.disabled = false;
+    if (version === sourceVersion) mic.disabled = listen.disabled = false;
   }
-});
+}
+listen.addEventListener('click', () => connectInput('tab'));
+mic.addEventListener('click', () => connectInput('mic'));
+addEventListener('pagehide', stopListening);
 
 function playFile(blob, title, loop) {
   clearSound();
@@ -1372,10 +1453,11 @@ function playFile(blob, title, loop) {
     }
     audioContext.resume().catch(() => {});
     document.getElementById('levels').hidden = false;
-    soundStatus.textContent = title + ' · Bass bends the broad contours. Treble stirs the smaller swirl.';
+    soundStatus.textContent = title + ' · Bass moves broad waves, mids move ripples, and highs move grain.';
   } catch {
     soundStatus.textContent = 'This browser supports playback only.';
   }
+  showSignal();
   const source = fileURL;
   audio.play().catch(() => {
     if (fileURL === source) soundStatus.textContent = audio.error ? 'Choose an audio file your browser can play.' : 'Press Play in the audio player.';
@@ -1388,7 +1470,8 @@ audio.addEventListener('play', () => {
 });
 audio.addEventListener('pause', () => {
   if (!audio.paused || tabStream) return;
-  lowMeter.value = highMeter.value = 0;
+  lowMeter.value = midMeter.value = highMeter.value = 0;
+  showSignal();
 });
 audio.addEventListener('error', () => {
   if (fileURL) soundStatus.textContent = 'Choose an audio file your browser can play.';
@@ -1398,9 +1481,24 @@ songFile.addEventListener('change', () => {
   if (file) playFile(file, file.name, false);
 });
 
-// Four bars at 100 BPM, rendered into a small mono WAV for the same input path as a local song.
+// Air in D: eight bars with a descending ground, a ii–V cadence and a final tonic.
+const score = [
+  // Cello, two inner voices, then four melody notes (MIDI pitch).
+  [50, 57, 66, [0, 0, 69, 74]],    // D
+  [49, 57, 64, [73, 71, 69, 76]],  // A/C♯
+  [47, 59, 62, [74, 73, 71, 78]],  // B minor
+  [45, 54, 61, [76, 73, 69, 73]],  // F♯ minor/A
+  [43, 59, 62, [74, 71, 67, 71]],  // G
+  [42, 57, 62, [69, 74, 78, 76]],  // D/F♯
+  [40, 55, 64, [76, 74, 73, 71]],  // E minor to A7
+  [38, 57, 66, [74, 69, 66, 74]],  // D
+];
+const pitches = Array.from({ length: 128 }, (_, n) => 440 * 2 ** ((n - 69) / 12));
+function envelope(t, length, attack, release) {
+  return Math.max(0, Math.min(1, t / attack, (length - t) / release));
+}
 function makeLoop() {
-  const rate = 22050, beat = .6, frames = Math.round(16 * beat * rate);
+  const rate = 24000, beat = 60 / 96, frames = Math.round(score.length * 4 * beat * rate);
   const wav = new ArrayBuffer(44 + frames * 2);
   const data = new DataView(wav);
   const tag = (offset, text) => [...text].forEach((c, i) => data.setUint8(offset + i, c.charCodeAt(0)));
@@ -1409,22 +1507,36 @@ function makeLoop() {
   data.setUint32(24, rate, true); data.setUint32(28, rate * 2, true);
   data.setUint16(32, 2, true); data.setUint16(34, 16, true);
   tag(36, 'data'); data.setUint32(40, frames * 2, true);
-  const roots = [55, 65.406, 73.416, 49];
-  const notes = [1, 1.5, 2, 1.25, 1.5, 2.5, 2, 1.5];
+  const beatFrames = Math.round(beat * rate);
+  const tau = 2 * Math.PI;
   for (let i = 0; i < frames; i++) {
-    const t = i / rate, b = Math.floor(t / beat), kick = t % beat, pluck = t % (beat / 2);
-    const root = roots[Math.floor(b / 4)], hz = root * 8 * notes[Math.floor(t / (beat / 2)) % 8];
-    const angle = 2 * Math.PI * hz * pluck;
-    const bassTone = .43 * Math.exp(-7 * kick) * Math.sin(2 * Math.PI * root * kick);
-    const bell = (.19 * Math.sin(angle) + .12 * Math.sin(4 * angle)) * Math.exp(-14 * pluck);
-    const edge = Math.min(1, pluck * 240, (beat / 2 - pluck) * 160);
-    data.setInt16(44 + 2 * i, (bassTone + bell) * edge * 32767, true);
+    const pulse = Math.floor(i / beatFrames), bar = Math.floor(pulse / 4), count = pulse % 4;
+    const [root, alto, tenor, melody] = score[bar];
+    const onBeat = (i % beatFrames) / rate;
+    const inHalf = (i % (beatFrames * 2)) / rate, inBar = (i % (beatFrames * 4)) / rate;
+    const dominant = bar === 6 && count >= 2;
+    const bassNote = dominant ? 45 : root + (count >= 2 && bar !== 7 ? 12 : 0);
+    const bow = tau * pitches[bassNote] * inHalf;
+    const cello = .32 * envelope(inHalf, 2 * beat, .038, .16) * Math.exp(-1.15 * inHalf) *
+      (Math.sin(bow) + .36 * Math.sin(2 * bow) + .16 * Math.sin(3 * bow));
+    const innerTime = dominant ? inHalf : inBar;
+    const chordLength = bar === 6 ? 2 * beat : 4 * beat;
+    const first = tau * pitches[dominant ? 55 : alto] * innerTime;
+    const second = tau * pitches[dominant ? 61 : tenor] * innerTime;
+    const strings = .093 * envelope(innerTime, chordLength, bar === 0 ? .65 : .17, .18) *
+      (Math.sin(first) + Math.sin(second) + .32 * Math.sin(2 * second));
+    const note = melody[count];
+    const pluck = tau * pitches[note] * onBeat;
+    const upper = note ? .18 * envelope(onBeat, beat, .007, .05) * Math.exp(-3.7 * onBeat) *
+      (Math.sin(pluck) + .38 * Math.sin(2 * pluck) +
+       Math.exp(-6 * onBeat) * (.34 * Math.sin(4 * pluck) + .22 * Math.sin(6 * pluck))) : 0;
+    data.setInt16(44 + 2 * i, Math.tanh(cello + strings + upper) * 32767, true);
   }
   return new Blob([wav], { type: 'audio/wav' });
 }
 document.getElementById('demo').addEventListener('click', () => {
   demoBlob ??= makeLoop();
-  playFile(demoBlob, 'Tide Study · original loop', true);
+  playFile(demoBlob, 'Air in D · original chamber study', true);
 });
 
 addEventListener('resize', fit);
