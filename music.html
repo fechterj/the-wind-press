@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Play music with a wind field. Tap along to a song or let a local audio file shape its contours.">
+<meta name="description" content="Play music with a wind field. Let the bass and treble of a song shape its contours.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="The Wind Press">
-<meta property="og:description" content="Shape a vortex, watch the field breathe, and capture a print.">
+<meta property="og:description" content="Shape a wind field with the sound of a song.">
 <title>The Wind Press — sound studio</title>
 <style>
 :root {
@@ -70,10 +70,8 @@ h2 { font-size: 24px; letter-spacing: -.035em; }
   position: relative; overflow: hidden; background: var(--plate-surround, var(--print-paper)); display: grid; place-items: center;
   border: 1px solid var(--line); border-radius: 3px; }
 #frame { position: relative; line-height: 0; }
-#frame[data-interactive] { cursor: crosshair; touch-action: none; }
 canvas { display: block; }
-#plate, #wind { width: 100%; height: 100%; }
-#wind { position: absolute; inset: 0; pointer-events: none; }
+#plate { width: 100%; height: 100%; }
 #busy { position: absolute; top: 12px; right: 12px; border-radius: 3px; padding: 5px 7px;
   background: var(--paper); color: var(--accent); font: 10px var(--mono); opacity: 0; }
 #busy.on { opacity: 1; }
@@ -194,15 +192,14 @@ th:first-child, td:first-child { text-align: left; }
   <div class="studio">
     <div id="stage">
       <div id="frame" role="group" aria-label="Interactive wind engraving" aria-describedby="mode-note"
-           aria-keyshortcuts="Space ArrowUp ArrowDown ArrowLeft ArrowRight Enter Escape" tabindex="0">
+           aria-keyshortcuts="Enter" tabindex="0">
         <canvas id="plate" aria-hidden="true"></canvas>
-        <canvas id="wind" aria-hidden="true"></canvas>
       </div>
       <div id="busy">Plotting…</div>
     </div>
     <div class="playback">
       <button id="play" type="button">Pause</button>
-      <p id="mode-note">Drag inside the circle to make a vortex.</p>
+      <p id="mode-note">Play music to move the field.</p>
       <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
     </div>
 
@@ -218,7 +215,7 @@ th:first-child, td:first-child { text-align: left; }
       <div id="embed"></div>
       <audio id="audio" controls hidden preload="metadata"></audio>
       <div id="levels" hidden><span>Bass <meter id="low" max="1"></meter></span><span>Treble <meter id="high" max="1"></meter></span></div>
-      <div id="tempo-row" hidden><button type="button" id="tap">Tap the beat</button> <output id="tempo"></output> · <a id="song-page" target="_blank" rel="noopener">Open song ↗</a></div>
+      <div id="tempo-row" hidden><button type="button" id="listen" hidden>Use tab audio</button> <a id="song-page" target="_blank" rel="noopener">Open song ↗</a></div>
       <p id="song-status" role="status">Try the original loop to hear bass bend the broad contours and high notes stir the smaller swirl.</p>
     </section>
     <section class="ink-desk" aria-labelledby="ink-title" data-editable>
@@ -251,9 +248,8 @@ th:first-child, td:first-child { text-align: left; }
         </details>
         <details>
           <summary>How the field moves</summary>
-          <p class="formula-explain">The loop twists the contours at two points. Audio adds a bass bend to the first and a treble bend to the second. Depth scales both twists. Dragging adds a temporary third.</p>
+          <p class="formula-explain">Bass bends the broad contours. Treble bends the smaller swirl in the opposite direction. Response controls the strength of both bends.</p>
           <div class="motion-equation" id="motion-equation"></div>
-          <p class="formula-explain">Keyboard: focus the plate, press Space to hold a vortex, move it with arrow keys, press Esc to release or Enter to capture.</p>
         </details>
       </div>
     </section>
@@ -275,7 +271,6 @@ th:first-child, td:first-child { text-align: left; }
         <div class="seedrow"><label for="seedval">Seed</label><input id="seedval" type="number" min="1" step="1"></div>
         <div class="checks">
           <label><input type="checkbox" id="t-furniture" checked> Crop marks and caption</label>
-          <label><input type="checkbox" id="t-wind" checked> Moving particles</label>
         </div>
       </details>
     </section>
@@ -437,9 +432,7 @@ function commit(pts) {
 
 // ───────────────────────────── canvas ─────────────────────────────
 const plate = document.getElementById('plate');
-const wind = document.getElementById('wind');
 const pctx = plate.getContext('2d');
-const wctx = wind.getContext('2d');
 const frame = document.getElementById('frame');
 const hudLines = document.getElementById('nlines');
 const hudPts = document.getElementById('npts');
@@ -454,10 +447,7 @@ function fit() {
   frame.style.width = size + 'px';
   frame.style.height = size + 'px';
   const dpr = Math.min(2.5, window.devicePixelRatio || 1);
-  for (const c of [plate, wind]) {
-    c.width = Math.round(size * dpr);
-    c.height = Math.round(size * dpr);
-  }
+  plate.width = plate.height = Math.round(size * dpr);
   view = { scale: size / VIEW_SPAN, dpr, size, x: CX - VIEW_SPAN / 2, y: CY - VIEW_SPAN / 2 };
   redrawAll();
 }
@@ -591,7 +581,6 @@ function startPlot() {
   cancelAnimationFrame(raf);
   buildField();
   refreshFormula();
-  clearParticles();
   strokes = [];
   renderedTwists = [];
   stats = { lines: 0, pts: 0 };
@@ -743,92 +732,23 @@ let playing = !reducedMotion.matches;
 let captured = null;
 let renderedTwists = [];
 let motionFrame = 0;
-let lastMotionTime = 0;
 let nextEngraving = 0;
 let phase = 0;
-const vortex = { x: CX, y: CY, strength: 0, held: false, direction: 1, pointerId: null };
-let particles = [];
-
 function twist(x, y, radius, strength) {
   return { x, y, inverseRadiusSquared: 1 / (radius * radius), strength };
 }
 
 function currentTwists() {
-  const twists = [];
-  if (params.depth > 0) {
-    const a = 2 * Math.PI * phase;
-    twists.push(twist(CX - 65, CY - 22, R - 69, (Math.sin(a) * 1.03 + bass * 1.18) * params.depth));
-    twists.push(twist(CX + 94, CY + 50, R - 108, (-Math.sin(2 * a) * .94 - treble * 1.25) * params.depth));
-  }
-  if (Math.abs(vortex.strength) > 0.003) {
-    const radius = Math.min(206, R - Math.hypot(vortex.x - CX, vortex.y - CY));
-    twists.push(twist(vortex.x, vortex.y, radius, vortex.strength));
-  }
-  return twists;
-}
-
-function clearParticles() {
-  wctx.setTransform(1, 0, 0, 1, 0, 0);
-  wctx.clearRect(0, 0, wind.width, wind.height);
-}
-
-function seedParticle(particle) {
-  const angle = Math.random() * Math.PI * 2;
-  const radius = Math.sqrt(Math.random()) * R * 0.995;
-  particle.x = CX + Math.cos(angle) * radius;
-  particle.y = CY + Math.sin(angle) * radius;
-  particle.life = 40 + Math.random() * 160;
-}
-
-function resetParticles() {
-  particles = Array.from({ length: Math.round(params.particles) }, () => {
-    const particle = {};
-    seedParticle(particle);
-    return particle;
-  });
-  clearParticles();
-}
-
-function drawParticles(dt) {
-  if (!params.wind || !particles.length) return;
-  wctx.setTransform(1, 0, 0, 1, 0, 0);
-  wctx.globalCompositeOperation = 'destination-out';
-  wctx.fillStyle = 'rgba(0, 0, 0, .14)';
-  wctx.fillRect(0, 0, wind.width, wind.height);
-
-  const scale = view.scale * view.dpr;
-  const from = [0, 0];
-  const to = [0, 0];
-  wctx.globalCompositeOperation = 'source-over';
-  wctx.setTransform(scale, 0, 0, scale, -view.x * scale, -view.y * scale);
-  wctx.strokeStyle = stocks[params.theme].tracer;
-  wctx.lineWidth = 1.45;
-  wctx.lineCap = 'round';
-  wctx.beginPath();
-  const travel = 1.6 * params.speed * dt;
-  for (const particle of particles) {
-    const direction = unit(particle.x, particle.y);
-    if (!direction) {
-      seedParticle(particle);
-      continue;
-    }
-    deform(particle.x, particle.y, renderedTwists, from);
-    particle.x += direction[0] * travel;
-    particle.y += direction[1] * travel;
-    particle.life -= dt;
-    if (particle.life <= 0 || (particle.x - CX) ** 2 + (particle.y - CY) ** 2 > R * R) {
-      seedParticle(particle);
-      continue;
-    }
-    deform(particle.x, particle.y, renderedTwists, to);
-    wctx.moveTo(from[0], from[1]);
-    wctx.lineTo(to[0], to[1]);
-  }
-  wctx.stroke();
+  if (!params.depth || (!bass && !treble)) return [];
+  return [
+    twist(CX - 65, CY - 22, R - 69, bass * .87 * params.depth),
+    twist(CX + 94, CY + 50, R - 108, -treble * 1.15 * params.depth),
+  ];
 }
 
 function canMove() {
-  return !captured && !job && !plotTimer && !document.hidden;
+  return playing && !captured && !job && !plotTimer && !document.hidden &&
+    analyser && (tabStream || (!audio.paused && !audio.hidden));
 }
 
 function requestMotion() {
@@ -837,46 +757,24 @@ function requestMotion() {
 
 function animate(time) {
   motionFrame = 0;
-  if (!canMove()) {
-    lastMotionTime = 0;
-    return;
-  }
-
-  const dt = lastMotionTime ? Math.min((time - lastMotionTime) / 1000, 0.05) : 1 / 60;
-  lastMotionTime = time;
-  if (playing) phase = (phase + dt / params.loopSeconds) % 1;
-  const target = vortex.held ? vortex.direction * 3.1 : 0;
-  vortex.strength += (target - vortex.strength) * (1 - Math.exp(-dt * (vortex.held ? 10 : 1.8)));
-  if (playing) sampleSound(time);
-  const twists = currentTwists();
+  if (!canMove()) return;
   if (time >= nextEngraving) {
-    const before = performance.now();
-    const needsRedraw = twists.length || renderedTwists.length;
-    renderedTwists = twists;
-    if (needsRedraw) redrawAll();
-    updateMotionEquation();
-    const cost = performance.now() - before;
-    // Leave time for inputs and particle playback even on a densely plotted plate.
-    nextEngraving = time + Math.max(32, Math.min(150, cost * 2.4));
+    const previousBass = bass, previousTreble = treble;
+    sampleSound();
+    if (bass !== previousBass || treble !== previousTreble) renderPosition();
+    nextEngraving = time + 32;
   }
-  if (playing || vortex.held || Math.abs(vortex.strength) > .003) {
-    drawParticles(dt * 60);
-    requestMotion();
-  } else {
-    renderPosition();
-    lastMotionTime = 0;
-  }
+  requestMotion();
 }
 
 function syncInstrument() {
   const plotting = Boolean(job || plotTimer);
-  frame.toggleAttribute('data-interactive', !captured && !plotting);
   frame.toggleAttribute('data-frozen', Boolean(captured));
   note.textContent = captured
     ? 'Plate captured. Share it or download a print.'
-    : 'Drag inside the circle to make a vortex.';
-  playButton.textContent = playing ? 'Pause flow' : 'Play flow';
-  playButton.setAttribute('aria-label', playing ? 'Pause loop' : 'Play loop');
+    : 'Play music to move the field.';
+  playButton.textContent = playing ? 'Pause response' : 'Enable response';
+  playButton.setAttribute('aria-label', playButton.textContent);
   playButton.disabled = Boolean(captured);
   captureButton.textContent = captured ? 'Back to editing' : 'Capture plate';
   captureButton.disabled = plotting;
@@ -886,82 +784,17 @@ function syncInstrument() {
   for (const section of controls) section.inert = Boolean(captured);
 }
 
-function releaseVortex() {
-  vortex.pointerId = null;
-  vortex.held = false;
-}
-
-function moveVortex(x, y) {
-  const dx = x - CX;
-  const dy = y - CY;
-  const ratio = Math.min(1, (R - 80) / (Math.hypot(dx, dy) || 1));
-  vortex.x = CX + dx * ratio;
-  vortex.y = CY + dy * ratio;
-  nextEngraving = 0;
-}
-
-function platePoint(event) {
-  const bounds = frame.getBoundingClientRect();
-  return [
-    view.x + (event.clientX - bounds.left) * VIEW_SPAN / bounds.width,
-    view.y + (event.clientY - bounds.top) * VIEW_SPAN / bounds.height,
-  ];
-}
-
-frame.addEventListener('pointerdown', event => {
-  if (!canMove() || event.button !== 0 || vortex.pointerId !== null) return;
-  const [x, y] = platePoint(event);
-  if (Math.hypot(x - CX, y - CY) > R) return;
-  event.preventDefault();
-  frame.focus({ preventScroll: true });
-  moveVortex(x, y);
-  vortex.pointerId = event.pointerId;
-  vortex.direction = event.shiftKey ? -1 : 1;
-  vortex.held = true;
-  frame.setPointerCapture(event.pointerId);
-  requestMotion();
-});
-frame.addEventListener('pointermove', event => {
-  if (event.pointerId === vortex.pointerId) moveVortex(...platePoint(event));
-});
-for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
-  frame.addEventListener(type, event => {
-    if (event.pointerId === vortex.pointerId) releaseVortex();
-  });
-}
 frame.addEventListener('keydown', event => {
-  if (event.key === 'Enter') {
-    if (!event.repeat && !captureButton.disabled) captureButton.click();
-    event.preventDefault();
-    return;
-  }
-  if (!canMove() || vortex.pointerId !== null) return;
-  const arrows = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
-  if (event.code === 'Space') {
-    if (!event.repeat) vortex.held = !vortex.held;
-    vortex.direction = event.shiftKey ? -1 : 1;
-  } else if (Object.hasOwn(arrows, event.key)) {
-    const [dx, dy] = arrows[event.key];
-    moveVortex(vortex.x + dx * 30, vortex.y + dy * 30);
-  } else if (event.key === 'Escape') releaseVortex();
-  else return;
-  event.preventDefault();
-  requestMotion();
-});
-frame.addEventListener('blur', () => {
-  if (vortex.pointerId === null) releaseVortex();
+  if (event.key === 'Enter' && !event.repeat && !captureButton.disabled) captureButton.click();
 });
 
 reducedMotion.addEventListener('change', event => {
   if (!event.matches) return;
   playing = false;
-  lastMotionTime = 0;
   syncInstrument();
 });
 document.addEventListener('visibilitychange', () => {
-  lastMotionTime = 0;
-  if (document.hidden) releaseVortex();
-  else requestMotion();
+  requestMotion();
 });
 
 captureButton.addEventListener('click', () => {
@@ -969,14 +802,11 @@ captureButton.addEventListener('click', () => {
   if (captured) {
     captured = null;
     applyInks();
-    lastMotionTime = 0;
     nextEngraving = 0;
-    if (playing) requestMotion();
-    else renderPosition();
+    renderPosition();
+    requestMotion();
   } else {
     captured = plateState();
-    releaseVortex();
-    clearParticles();
   }
   syncInstrument();
 });
@@ -1028,13 +858,9 @@ function refreshFormula() {
 
 function updateMotionEquation() {
   if (!motionDetails.open) return;
-  const depth = params.depth;
-  const seconds = params.loopSeconds;
-  const time = (phase * seconds).toFixed(1);
   document.getElementById('motion-equation').textContent =
-    't = ' + time + ' s, T = ' + seconds.toFixed(1) + ' s · ' +
-    'twist 1 ≈ ' + (1.03 * depth).toFixed(2) + ' sin(2πt/T) · ' +
-    'twist 2 ≈ −' + (.94 * depth).toFixed(2) + ' sin(4πt/T)';
+    'Broad bend = ' + (.87 * params.depth).toFixed(2) + ' × bass · Small bend = −' +
+    (1.15 * params.depth).toFixed(2) + ' × treble';
 }
 const motionDetails = document.querySelector('#motion-equation').closest('details');
 motionDetails.addEventListener('toggle', updateMotionEquation);
@@ -1043,7 +869,6 @@ function renderPosition() {
   if (job || captured) return;
   renderedTwists = currentTwists();
   redrawAll();
-  clearParticles();
   updateMotionEquation();
 }
 
@@ -1063,8 +888,6 @@ function updatePresetButtons() {
 function setPattern(preset, index) {
   const { name, ...settings } = preset;
   Object.assign(params, settings);
-  releaseVortex();
-  vortex.strength = 0;
   selectedPreset = index;
   formulaGroup = 'broad';
   updatePresetButtons();
@@ -1146,7 +969,6 @@ function applyInks() {
   for (const [i, canvas] of [...presetGallery.querySelectorAll('canvas')].entries()) {
     drawThumbnail(canvas, { ...params, ...presets[i] });
   }
-  clearParticles();
   redrawAll();
 }
 themeButton.addEventListener('click', () => {
@@ -1163,16 +985,13 @@ const patternKeys = new Set(['swirls', 'swirlLam', 'detail', 'detailLam', 'grain
 const sliders = [
   ['field-sliders', 'swirlLam', 'Wave size', .6, 5, .1, v => v.toFixed(1) + ' × radius', 'plot'],
   ['field-sliders', 'detail', 'Ripple waves', 0, 6, 1, v => String(v), 'plot'],
-  ['field-sliders', 'depth', 'Loop depth', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
-  ['advanced-sliders', 'loopSeconds', 'Loop duration', 3, 30, .5, v => v.toFixed(1) + ' s', 'motion'],
+  ['field-sliders', 'depth', 'Response', 0, 1.7, .05, v => Math.round(v * 100) + '%', 'motion'],
   ['advanced-sliders', 'swirls', 'Broad waves', 1, 6, 1, v => String(v), 'plot'],
   ['advanced-sliders', 'detailLam', 'Ripple size', .2, 1.6, .05, v => v.toFixed(2) + ' × radius', 'plot'],
   ['advanced-sliders', 'grain', 'Grain strength', 0, .4, .005, v => Math.round(v * 100) + '%', 'plot'],
   ['advanced-sliders', 'spacing', 'Ink spacing', 1.8, 14, .1, v => v.toFixed(1), 'plot'],
   ['advanced-sliders', 'weight', 'Line weight', .3, 2.4, .05, v => v.toFixed(2), 'print'],
   ['advanced-sliders', 'ink', 'Ink opacity', .3, 1, .05, v => Math.round(v * 100) + '%', 'print'],
-  ['advanced-sliders', 'particles', 'Particle count', 0, 2600, 50, v => String(v), 'particles'],
-  ['advanced-sliders', 'speed', 'Particle speed', .1, 3.5, .1, v => v.toFixed(1) + '×', 'particles'],
 ];
 
 function inRange(value, min, max) {
@@ -1251,11 +1070,7 @@ for (const [parent, key, labelText, min, max, step, format, effect] of sliders) 
     }
     if (effect === 'plot') schedulePlot();
     else if (effect === 'motion') renderPosition();
-    else if (effect === 'print') redrawAll();
-    else {
-      resetParticles();
-      requestMotion();
-    }
+    else redrawAll();
   });
   row.append(label, output, input);
   document.getElementById(parent).append(row);
@@ -1282,19 +1097,8 @@ furnitureOption.addEventListener('change', event => {
   params.furniture = event.target.checked;
   redrawAll();
 });
-const windOption = document.getElementById('t-wind');
-windOption.checked = params.wind;
-windOption.addEventListener('change', event => {
-  params.wind = event.target.checked;
-  if (params.wind) {
-    resetParticles();
-    requestMotion();
-  } else clearParticles();
-});
-
 playButton.addEventListener('click', () => {
   playing = !playing;
-  lastMotionTime = 0;
   syncInstrument();
   if (playing) requestMotion();
 });
@@ -1396,15 +1200,31 @@ const songLink = document.getElementById('song-link');
 const songFile = document.getElementById('song-file');
 const embed = document.getElementById('embed');
 const tempoRow = document.getElementById('tempo-row');
-const tempo = document.getElementById('tempo');
+const listen = document.getElementById('listen');
 const lowMeter = document.getElementById('low');
 const highMeter = document.getElementById('high');
 const clearSong = document.getElementById('clear-song');
 let audioContext, analyser, spectrum, fileURL, demoBlob;
-let bass = 0, treble = 0, bpm = 0, taps = [];
+let bass = 0, treble = 0, tabStream = null, tabSource, mediaSource, waveform;
+let sourceVersion = 0;
 
-function sampleSound(time) {
-  if (analyser && !audio.paused && !audio.hidden) {
+function initAnalysis() {
+  if (analyser) return;
+  audioContext = new AudioContext();
+  analyser = audioContext.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = .40;
+  spectrum = new Uint8Array(analyser.frequencyBinCount);
+  waveform = new Float32Array(analyser.fftSize);
+}
+
+function sampleSound() {
+  analyser.getFloatTimeDomainData(waveform);
+  let energy = 0;
+  for (const value of waveform) energy += value * value;
+  if (energy / waveform.length < 0.000004 || (!tabStream && (audio.muted || !audio.volume))) {
+    bass = treble = 0;
+  } else {
     analyser.getByteFrequencyData(spectrum);
     const band = (lowHz, highHz) => {
       const binHz = audioContext.sampleRate / analyser.fftSize;
@@ -1412,19 +1232,25 @@ function sampleSound(time) {
       const end = Math.min(spectrum.length, Math.ceil(highHz / binHz));
       let sum = 0;
       for (let i = first; i < end; i++) sum += spectrum[i] ** 2;
-      return Math.min(1, Math.sqrt(sum / Math.max(1, end - first)) / 165);
+      return Math.min(1, Math.sqrt(sum / Math.max(1, end - first)) / 200);
     };
     bass = band(35, 190);
     treble = band(1400, 6500);
-    lowMeter.value = bass;
-    highMeter.value = treble;
-  } else if (bpm && taps.length) {
-    const beat = Math.max(0, time - taps[taps.length - 1]) * bpm / 60000;
-    bass = .85 * Math.exp(-5 * (beat % 1));
-    treble = .36 * Math.exp(-6 * ((beat + .5) % 1));
-  } else {
-    bass = treble = 0;
   }
+  lowMeter.value = bass;
+  highMeter.value = treble;
+}
+
+function stopListening() {
+  sourceVersion++;
+  tabSource?.disconnect();
+  tabSource = null;
+  if (tabStream) for (const track of tabStream.getTracks()) track.stop();
+  tabStream = null;
+  listen.disabled = false;
+  listen.textContent = 'Use tab audio';
+  lowMeter.value = highMeter.value = 0;
+  document.getElementById('levels').hidden = true;
 }
 
 function clearSound() {
@@ -1435,9 +1261,9 @@ function clearSound() {
   fileURL = null;
   embed.replaceChildren();
   audio.hidden = tempoRow.hidden = clearSong.hidden = document.getElementById('levels').hidden = true;
-  taps = [];
-  bpm = bass = treble = lowMeter.value = highMeter.value = 0;
-  tempo.textContent = '';
+  stopListening();
+  bass = treble = 0;
+  renderPosition();
   songFile.value = '';
 }
 clearSong.addEventListener('click', () => {
@@ -1482,21 +1308,51 @@ document.getElementById('song-form').addEventListener('submit', event => {
   embed.append(iframe);
   tempoRow.hidden = clearSong.hidden = false;
   document.getElementById('song-page').href = player.link;
-  soundStatus.textContent = 'Play the song in the player, then tap along to pulse the field at your tempo.';
+  listen.hidden = !navigator.mediaDevices?.getDisplayMedia;
+  soundStatus.textContent = listen.hidden ? 'Play the song here. For sound-driven motion on this device, open an audio file or try the loop.' :
+    'For sound-driven motion, choose Use tab audio, select this tab, and include its audio.';
 });
-document.getElementById('tap').addEventListener('click', () => {
-  const now = performance.now();
-  const gap = now - taps[taps.length - 1];
-  if (gap < 180) return;
-  if (gap > 2000) { taps = []; bpm = 0; }
-  taps.push(now);
-  if (taps.length > 6) taps.shift();
-  if (taps.length > 1) bpm = 60000 * (taps.length - 1) / (now - taps[0]);
-  tempo.textContent = bpm ? Math.round(bpm) + ' BPM' : 'Tap again';
-  if (captured) captureButton.click();
-  playing = true;
-  syncInstrument();
-  requestMotion();
+
+listen.addEventListener('click', async () => {
+  if (tabStream) {
+    stopListening();
+    soundStatus.textContent = 'Tab audio disconnected.';
+    return;
+  }
+  const version = sourceVersion;
+  let stream;
+  listen.disabled = true;
+  try {
+    initAnalysis();
+    const resume = audioContext.resume();
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' },
+      audio: { suppressLocalAudioPlayback: false }, preferCurrentTab: true, selfBrowserSurface: 'include' });
+    await resume;
+    if (version !== sourceVersion) return;
+    const track = stream.getAudioTracks()[0];
+    if (!track || stream.getVideoTracks()[0]?.getSettings().displaySurface !== 'browser') {
+      soundStatus.textContent = 'Select this browser tab and enable tab audio, or open an audio file.';
+      return;
+    }
+    tabSource = audioContext.createMediaStreamSource(stream);
+    tabSource.connect(analyser);
+    tabStream = stream;
+    for (const video of stream.getVideoTracks()) video.stop();
+    track.addEventListener('ended', () => {
+      if (tabStream !== stream) return;
+      stopListening();
+      soundStatus.textContent = 'Tab audio disconnected.';
+    });
+    listen.textContent = 'Disconnect audio';
+    document.getElementById('levels').hidden = false;
+    soundStatus.textContent = 'The field follows audio from the selected tab.';
+    requestMotion();
+  } catch {
+    if (version === sourceVersion) soundStatus.textContent = 'Tab audio unavailable. Try again or open an audio file.';
+  } finally {
+    if (stream && tabStream !== stream) for (const track of stream.getTracks()) track.stop();
+    if (version === sourceVersion) listen.disabled = false;
+  }
 });
 
 function playFile(blob, title, loop) {
@@ -1508,14 +1364,11 @@ function playFile(blob, title, loop) {
   audio.hidden = clearSong.hidden = false;
   if (captured) captureButton.click();
   try {
-    if (!audioContext) {
-      audioContext = new AudioContext();
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = .68;
-      spectrum = new Uint8Array(analyser.frequencyBinCount);
-      audioContext.createMediaElementSource(audio).connect(analyser);
-      analyser.connect(audioContext.destination);
+    initAnalysis();
+    if (!mediaSource) {
+      mediaSource = audioContext.createMediaElementSource(audio);
+      mediaSource.connect(analyser);
+      mediaSource.connect(audioContext.destination);
     }
     audioContext.resume().catch(() => {});
     document.getElementById('levels').hidden = false;
@@ -1530,13 +1383,12 @@ function playFile(blob, title, loop) {
 }
 audio.addEventListener('play', () => {
   audioContext?.resume().catch(() => {});
-  if (!reducedMotion.matches) playing = true;
   syncInstrument();
   requestMotion();
 });
 audio.addEventListener('pause', () => {
-  if (!audio.paused) return;
-  bass = treble = lowMeter.value = highMeter.value = 0;
+  if (!audio.paused || tabStream) return;
+  lowMeter.value = highMeter.value = 0;
 });
 audio.addEventListener('error', () => {
   if (fileURL) soundStatus.textContent = 'Choose an audio file your browser can play.';
@@ -1578,7 +1430,6 @@ document.getElementById('demo').addEventListener('click', () => {
 addEventListener('resize', fit);
 fit();
 applyInks();
-resetParticles();
 startPlot();
 
 })();
