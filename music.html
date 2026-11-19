@@ -158,6 +158,9 @@ th:first-child, td:first-child { text-align: left; }
 #levels { display: flex; gap: 10px; font: 11px var(--mono); margin-top: 8px; }
 #levels label { flex: 1; }
 #levels meter { display: block; width: 100%; accent-color: var(--accent); }
+.note-seed { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.note-seed label { cursor: pointer; padding-block: 7px; }
+#heard-seed { font: 11px var(--mono); color: var(--muted); }
 #song-status { margin-top: 8px; color: var(--muted); font-size: 12px; }
 
 </style>
@@ -199,6 +202,10 @@ th:first-child, td:first-child { text-align: left; }
       <span id="hud"><b id="nlines">0</b> lines · <b id="npts">0</b> points</span>
     </div>
 
+      <div class="note-seed" data-editable>
+        <label><input type="checkbox" id="note-seeds"> New seed on notes</label>
+        <span id="heard-seed"></span>
+      </div>
       <p id="song-status" role="status"></p>
       <div id="levels" aria-label="Audio frequency levels">
         <label>Bass → Broad<meter id="low" max="1"></meter></label>
@@ -309,7 +316,7 @@ const params = {
   detail: 3, detailLam: 0.75,
   grain: 0.09,
   spacing: 3.0, weight: 1, ink: 1,
-  seed: 20261117,
+  seed: 20261117, noteSeeds: false,
   particles: 900, speed: 1,
   furniture: true, wind: true,
   depth: 1, loopSeconds: 12,
@@ -638,10 +645,10 @@ function startPlot() {
     }
   }
 
-  job = { dsep, seeds, i: 0 };
+  job = { dsep, seeds, i: 0, holdFrame: params.noteSeeds && !sharedPlate, nextSeed: false };
   syncInstrument();
-  startPainting(pctx, params, view.dpr * view.scale, view.x, view.y);
-  busy.classList.add('on');
+  if (!job.holdFrame) startPainting(pctx, params, view.dpr * view.scale, view.x, view.y);
+  busy.classList.toggle('on', !job.holdFrame);
   cancelAnimationFrame(raf);
   raf = requestAnimationFrame(tick);
 }
@@ -697,7 +704,7 @@ function tick() {
     strokes.push(s);
 
     // paint immediately: no full repaint, just the new line
-    execStroke(pctx, s, params, []);
+    if (!job.holdFrame) execStroke(pctx, s, params, []);
     pctx.globalAlpha = 1;
 
     stats.lines++; stats.pts += pts.length / 2;
@@ -710,6 +717,7 @@ function tick() {
   if (job.i < total) {
     raf = requestAnimationFrame(tick);
   } else {
+    const nextSeed = job.nextSeed;
     job = null;
     busy.classList.remove('on');
     pctx.globalAlpha = 1;
@@ -724,7 +732,8 @@ function tick() {
     } else {
       renderPosition();
     }
-    syncInstrument();
+    if (nextSeed) schedulePlot();
+    else syncInstrument();
     requestMotion();
   }
 }
@@ -764,7 +773,7 @@ let motionFrame = 0;
 let nextEngraving = 0;
 let phase = 0;
 function canMove() {
-  return playing && !captured && !job && !plotTimer && !document.hidden &&
+  return playing && !captured && !sharedPlate && !document.hidden &&
     analyser && (micStream || (!audio.paused && !audio.hidden));
 }
 
@@ -778,6 +787,7 @@ function animate(time) {
   if (time >= nextEngraving) {
     const previousBass = bass, previousMid = mids, previousTreble = treble;
     sampleSound();
+    if (params.noteSeeds && detectAttack(time)) newSeed(true);
     showSignal();
     if (bass !== previousBass || mids !== previousMid || treble !== previousTreble) renderPosition();
     nextEngraving = time + 32;
@@ -911,6 +921,7 @@ function setPattern(preset, index) {
   updatePresetButtons();
   for (const refresh of sliderBindings) refresh();
   seedInput.value = params.seed;
+  showSeed();
   phase = 0;
   updateMotionEquation();
   clearTimeout(plotTimer);
@@ -1033,6 +1044,7 @@ function readSharedPlate() {
   const settings = plate?.settings;
   if (plate?.version !== 1 || !settings ||
       !Object.hasOwn(stocks, settings.theme) || !Object.hasOwn(inkModes, settings.mapping) ||
+      (settings.noteSeeds !== undefined && typeof settings.noteSeeds !== 'boolean') ||
       !Number.isInteger(settings.seed) || !inRange(settings.seed, 1, MAX_SEED) ||
       typeof settings.furniture !== 'boolean' || typeof settings.wind !== 'boolean' ||
       !Number.isInteger(settings.swirls) || !Number.isInteger(settings.detail) ||
@@ -1047,7 +1059,7 @@ function readSharedPlate() {
 
 let sharedPlate = readSharedPlate();
 if (sharedPlate) {
-  for (const key of Object.keys(params)) params[key] = sharedPlate.settings[key];
+  for (const key of Object.keys(params)) params[key] = sharedPlate.settings[key] ?? params[key];
   selectedPreset = presets.findIndex(({ name, ...settings }) =>
     Object.keys(settings).every(key => settings[key] === params[key]));
   updatePresetButtons();
@@ -1099,17 +1111,33 @@ for (const [parent, key, labelText, min, max, step, format, effect] of sliders) 
 const seedInput = document.getElementById('seedval');
 seedInput.max = MAX_SEED;
 seedInput.value = params.seed;
-function applySeed(value) {
+function applySeed(value, fromNote = false) {
   const seed = Number.isFinite(value) ? Math.max(1, Math.min(MAX_SEED, Math.round(value))) : params.seed;
   seedInput.value = seed;
   if (params.seed === seed) return;
   params.seed = seed;
   selectedPreset = -1;
   updatePresetButtons();
-  schedulePlot();
+  if (fromNote && job) job.nextSeed = true;
+  else schedulePlot();
+  showSeed();
 }
 seedInput.addEventListener('change', () => applySeed(seedInput.valueAsNumber));
-reroll.addEventListener('click', () => applySeed(1 + Math.floor(Math.random() * MAX_SEED)));
+function newSeed(fromNote = false) {
+  applySeed(1 + Math.floor(Math.random() * MAX_SEED), fromNote);
+}
+reroll.addEventListener('click', () => newSeed());
+
+const noteSeeds = document.getElementById('note-seeds');
+const seedLabel = document.getElementById('heard-seed');
+noteSeeds.checked = params.noteSeeds;
+function showSeed() { seedLabel.textContent = params.noteSeeds ? 'Seed ' + params.seed : ''; }
+noteSeeds.addEventListener('change', () => {
+  params.noteSeeds = noteSeeds.checked;
+  resetAttacks();
+  showSeed();
+});
+showSeed();
 
 const furnitureOption = document.getElementById('t-furniture');
 furnitureOption.checked = params.furniture;
@@ -1225,6 +1253,41 @@ const highMeter = document.getElementById('high');
 let audioContext, analyser, spectrum, demoURL, demoBlob;
 let bass = 0, mids = 0, treble = 0, micStream = null, micSource, mediaSource, waveform;
 let sourceVersion = 0;
+let previousSpectrum, lastAttack = -Infinity;
+let wasQuiet = true, fluxFloor = 0;
+
+function resetAttacks() {
+  previousSpectrum?.fill(0);
+  lastAttack = -Infinity;
+  wasQuiet = true;
+  fluxFloor = 0;
+}
+
+// Positive spectral changes catch rearticulations and pitch changes in a sustained phrase.
+function detectAttack(time) {
+  if (Math.max(bass, mids, treble) < .06) {
+    previousSpectrum.fill(0);
+    wasQuiet = true;
+    fluxFloor = 0;
+    return false;
+  }
+  let gain = 0, total = 0;
+  const end = Math.min(spectrum.length, Math.ceil(10000 * analyser.fftSize / audioContext.sampleRate));
+  for (let i = 1; i < end; i++) {
+    const magnitude = 10 ** (spectrum[i] / 20);
+    gain += Math.max(0, magnitude - previousSpectrum[i]);
+    total += magnitude;
+    previousSpectrum[i] = magnitude;
+  }
+  const flux = gain / Math.max(total, 1e-8);
+  const attack = time - lastAttack >= 100 &&
+    (wasQuiet || flux > Math.max(.16, fluxFloor * 2.3 + .055));
+  fluxFloor += .14 * (flux - fluxFloor);
+  wasQuiet = false;
+  if (attack) lastAttack = time;
+  return attack;
+}
+
 
 const micSupported = Boolean(navigator.mediaDevices?.getUserMedia);
 mic.disabled = !micSupported;
@@ -1252,6 +1315,7 @@ function initAnalysis() {
   analyser.smoothingTimeConstant = .40;
   spectrum = new Float32Array(analyser.frequencyBinCount);
   waveform = new Float32Array(analyser.fftSize);
+  previousSpectrum = new Float32Array(analyser.frequencyBinCount);
 }
 
 function sampleSound() {
@@ -1280,6 +1344,7 @@ function sampleSound() {
 }
 
 function stopListening() {
+  resetAttacks();
   mic.removeAttribute('aria-busy');
   sourceVersion++;
   micSource?.disconnect();
